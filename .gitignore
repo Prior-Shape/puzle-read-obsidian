@@ -1,0 +1,18 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# 构建产物（esbuild 输出在仓库根目录）
+main.js
+*.js.map
+dist/
+
+# 测试 vault / 本地环境
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Orca DAG 规划执行脚本与任务 spec（暂不入库）
+/scripts/

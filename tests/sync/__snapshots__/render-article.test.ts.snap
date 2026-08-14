@@ -1,0 +1,128 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`articleFrontmatter > fills defaults for missing optional fields 1`] = `
+{
+  "author": null,
+  "chat_id": null,
+  "comment_count": 0,
+  "created": "2026-03-18T14:46:40Z",
+  "domain": "example.com",
+  "highlight_count": 0,
+  "puzle_id": 100,
+  "puzle_type": "article",
+  "reading_id": 9,
+  "status": null,
+  "synced": "2026-07-16T12:00:00Z",
+  "title": "",
+  "topics": [],
+  "url": null,
+}
+`;
+
+exports[`articleFrontmatter > matches the TECH_SPEC 3.2 field set 1`] = `
+{
+  "author": "莫提默",
+  "chat_id": 214,
+  "comment_count": 3,
+  "created": "2026-03-18T14:46:40Z",
+  "domain": "example.com",
+  "highlight_count": 12,
+  "puzle_id": 1727,
+  "puzle_type": "article",
+  "reading_id": 123,
+  "status": "done",
+  "synced": "2026-07-16T12:00:00Z",
+  "title": "如何阅读一本书",
+  "topics": [
+    "阅读方法",
+    "学习",
+  ],
+  "url": "https://example.com/how-to-read",
+}
+`;
+
+exports[`renderArticleManaged > keeps article-level comments in chronological order 1`] = `
+"## 正文
+正文
+
+## 想法
+- 先发的（🙋 我 · 2026-03-19 00:00）
+- 后发的（🙋 我 · 2026-03-20 00:00）
+
+## 高亮
+
+\`\`\`base
+filters:
+  and:
+    - file.inFolder("PuzleRead/Highlights")
+    - file.hasLink(this.file)
+views:
+  - type: table
+    name: 本文高亮
+    order: [file.name, note.category, note.created]
+\`\`\`"
+`;
+
+exports[`renderArticleManaged > omits empty sections but always keeps the base block 1`] = `
+"## 高亮
+
+\`\`\`base
+filters:
+  and:
+    - file.inFolder("MyRoot/Highlights")
+    - file.hasLink(this.file)
+views:
+  - type: table
+    name: 本文高亮
+    order: [file.name, note.category, note.created]
+\`\`\`"
+`;
+
+exports[`renderArticleManaged > renders summary, anchored content, thoughts and the base block 1`] = `
+"## 摘要
+> [!abstract] 核心观点
+> **关键要点**
+> - 阅读有四个层次
+
+## 正文
+这是一篇关于阅读方法的文章。
+
+==阅读的第一层次是基础阅读。== [[如何阅读一本书 h456|💬]]
+
+## 想法
+- 这篇文章值得反复读（🙋 我 · 2026-03-19 09:00）
+- 确实如此（🤖 Puzle · 2026-03-19 09:05）
+
+## 高亮
+
+\`\`\`base
+filters:
+  and:
+    - file.inFolder("PuzleRead/Highlights")
+    - file.hasLink(this.file)
+views:
+  - type: table
+    name: 本文高亮
+    order: [file.name, note.category, note.created]
+\`\`\`"
+`;
+
+exports[`renderSummaryCallout > omits empty categories and multi-line items keep the callout prefix 1`] = `
+"> [!abstract] 核心观点
+> **关键要点**
+> - 第一行
+>   第二行"
+`;
+
+exports[`renderSummaryCallout > renders all present categories inside one abstract callout 1`] = `
+"> [!abstract] 核心观点
+> **关键要点**
+> - 阅读有四个层次
+> - 基础阅读是第一层次
+> **新知识**
+> - 检视阅读常被忽略
+> **不同观点**
+> - 作者认为速读班效果有限
+> **相关信息**
+> - 参考《如何阅读两本书》"
+`;

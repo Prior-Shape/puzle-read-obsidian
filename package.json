@@ -1,0 +1,33 @@
+{
+	"name": "puzle-read-obsidian",
+	"version": "0.1.0",
+	"description": "Puzle Read Obsidian plugin — sync articles, highlights and chats into your vault.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build:template": "node scripts/build-template.mjs",
+		"test": "vitest run"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"puzle-read"
+	],
+	"author": "PriorShape",
+	"license": "MIT",
+	"dependencies": {
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1"
+	},
+	"devDependencies": {
+		"@types/react": "^18.3.12",
+		"@types/react-dom": "^18.3.1",
+		"builtin-modules": "^4.0.0",
+		"esbuild": "^0.25.0",
+		"obsidian": "latest",
+		"typescript": "^5.7.2",
+		"vitest": "^3.0.0",
+		"yaml": "^2.9.0"
+	}
+}

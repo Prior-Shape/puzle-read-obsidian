@@ -1,0 +1,22 @@
+filters:
+  and:
+    - file.inFolder("PuzleRead/Highlights")
+    - puzle_type == "highlight"
+views:
+  - type: table
+    name: 全部高亮
+    order:
+      - file.name
+      - note.article
+      - note.category
+      - note.created
+  - type: table
+    name: 按分类
+    groupBy:
+      property: note.category
+      direction: ASC
+  - type: table
+    name: 按文章
+    groupBy:
+      property: note.article
+      direction: ASC

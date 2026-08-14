@@ -1,0 +1,276 @@
+/* Puzle Read plugin styles */
+
+.puzle-chat-root {
+	padding: 0;
+	overflow: hidden;
+}
+
+.puzle-chat {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+}
+
+/* ---------- header / session picker ---------- */
+
+.puzle-chat-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+}
+
+.puzle-chat-session-select {
+	flex: 1;
+	min-width: 0;
+	height: var(--input-height, 30px);
+	padding: 0 var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 4px);
+	background-color: var(--interactive-normal);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.puzle-chat-session-select:hover {
+	background-color: var(--interactive-hover);
+}
+
+.puzle-chat-new-button {
+	flex: none;
+	width: var(--input-height, 30px);
+	height: var(--input-height, 30px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 4px);
+	background-color: var(--interactive-normal);
+	color: var(--text-normal);
+	font-size: var(--font-ui-large);
+	line-height: 1;
+	cursor: pointer;
+}
+
+.puzle-chat-new-button:hover {
+	background-color: var(--interactive-hover);
+}
+
+.puzle-chat-new-button:disabled,
+.puzle-chat-session-select:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* ---------- message list ---------- */
+
+.puzle-chat-messages {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	padding: var(--size-4-3);
+}
+
+.puzle-chat-status {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	text-align: center;
+	padding: var(--size-4-6) var(--size-4-3);
+}
+
+.puzle-chat-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+	padding: var(--size-4-2) var(--size-4-3);
+	border: 1px solid var(--background-modifier-error);
+	border-radius: var(--radius-s, 4px);
+}
+
+.puzle-chat-message {
+	display: flex;
+	max-width: 100%;
+}
+
+.puzle-chat-message-user {
+	justify-content: flex-end;
+}
+
+.puzle-chat-message-assistant {
+	justify-content: flex-start;
+}
+
+.puzle-chat-bubble {
+	max-width: 92%;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-radius: var(--radius-m, 8px);
+	overflow-wrap: break-word;
+}
+
+.puzle-chat-message-user .puzle-chat-bubble {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-bottom-right-radius: var(--radius-s, 4px);
+}
+
+.puzle-chat-message-assistant .puzle-chat-bubble {
+	background-color: var(--background-secondary);
+	color: var(--text-normal);
+	border-bottom-left-radius: var(--radius-s, 4px);
+}
+
+.puzle-chat-user-text {
+	white-space: pre-wrap;
+}
+
+.puzle-chat-markdown {
+	font-size: inherit;
+	line-height: var(--line-height-normal, 1.5);
+}
+
+.puzle-chat-markdown > *:first-child {
+	margin-top: 0;
+}
+
+.puzle-chat-markdown > *:last-child {
+	margin-bottom: 0;
+}
+
+.puzle-chat-markdown pre,
+.puzle-chat-markdown code {
+	background-color: var(--background-primary-alt);
+}
+
+.puzle-chat-empty {
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}
+
+/* streaming cursor */
+
+.puzle-chat-cursor {
+	display: inline-block;
+	width: 2px;
+	height: 1em;
+	margin-left: 2px;
+	vertical-align: text-bottom;
+	background-color: var(--text-normal);
+	animation: puzle-chat-blink 1s steps(1) infinite;
+}
+
+@keyframes puzle-chat-blink {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0;
+	}
+}
+
+/* thinking logs (collapsible) */
+
+.puzle-chat-thinking {
+	margin-bottom: var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s, 4px);
+	background-color: var(--background-primary);
+}
+
+.puzle-chat-thinking summary {
+	cursor: pointer;
+	padding: var(--size-4-1) var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	user-select: none;
+}
+
+.puzle-chat-thinking-content {
+	padding: var(--size-4-1) var(--size-4-2) var(--size-4-2);
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-1);
+}
+
+.puzle-chat-thinking-item {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	white-space: pre-wrap;
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: var(--size-4-2);
+}
+
+/* ---------- composer ---------- */
+
+.puzle-chat-composer {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--size-4-2);
+	padding: var(--size-4-3);
+	border-top: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+}
+
+.puzle-chat-input {
+	flex: 1;
+	min-width: 0;
+	resize: none;
+	padding: var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 4px);
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-family: inherit;
+	font-size: var(--font-ui-medium);
+}
+
+.puzle-chat-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+.puzle-chat-input:disabled {
+	opacity: 0.6;
+	background-color: var(--background-secondary);
+}
+
+.puzle-chat-send,
+.puzle-chat-stop {
+	flex: none;
+	height: var(--input-height, 30px);
+	padding: 0 var(--size-4-4);
+	border: none;
+	border-radius: var(--input-radius, 4px);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.puzle-chat-send {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.puzle-chat-send:hover:not(:disabled) {
+	background-color: var(--interactive-accent-hover);
+}
+
+.puzle-chat-send:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.puzle-chat-stop {
+	background-color: var(--background-modifier-error);
+	color: var(--text-on-accent);
+}
+
+.puzle-chat-stop:hover {
+	opacity: 0.9;
+}

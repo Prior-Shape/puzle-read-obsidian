@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`highlightFrontmatter > matches the TECH_SPEC 3.3 field set 1`] = `
+{
+  "article": "[[如何阅读一本书 (r123)]]",
+  "category": "key_points",
+  "color": "rgba(255,212,0,.4)",
+  "created": "2026-03-18T15:02:11Z",
+  "highlight_id": 456,
+  "puzle_type": "highlight",
+  "reading_id": 123,
+  "role": "user",
+}
+`;
+
+exports[`highlightFrontmatter > uses null color when missing and assistant role is preserved 1`] = `
+{
+  "article": "[[文章 (r9)]]",
+  "category": "key_points",
+  "color": null,
+  "created": "2026-03-18T15:02:11Z",
+  "highlight_id": 7,
+  "puzle_type": "highlight",
+  "reading_id": 9,
+  "role": "assistant",
+}
+`;
+
+exports[`renderHighlightManaged > renders only the quote when there are no comments 1`] = `"> 只有高亮"`;
+
+exports[`renderHighlightManaged > renders the quote and attached comments with role markers 1`] = `
+"> 阅读的第一层次是基础阅读。
+> 第二行内容。
+
+## 想法
+- 这点和主题阅读呼应（🙋 我 · 2026-03-18 16:00）
+- 是的（🤖 Puzle · 2026-03-18 16:05）"
+`;

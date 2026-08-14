@@ -1,0 +1,9 @@
+{
+	"id": "puzle-read",
+	"name": "Puzle Read",
+	"version": "0.1.0",
+	"minAppVersion": "1.10.0",
+	"description": "Sync Puzle Read articles, highlights and chats into your vault, with Bases views and AI chat.",
+	"author": "PriorShape",
+	"isDesktopOnly": false
+}

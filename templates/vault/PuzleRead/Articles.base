@@ -1,0 +1,25 @@
+filters:
+  and:
+    - file.inFolder("PuzleRead/Articles")
+    - puzle_type == "article"
+views:
+  - type: table
+    name: 全部文章
+    order:
+      - file.name
+      - note.author
+      - note.domain
+      - note.status
+      - note.highlight_count
+      - note.created
+  - type: table
+    name: 按主题
+    groupBy:
+      property: note.topics
+      direction: ASC
+  - type: cards
+    name: 最近阅读
+    sort:
+      - property: note.created
+        direction: DESC
+    limit: 50

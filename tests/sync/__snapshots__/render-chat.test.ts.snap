@@ -1,0 +1,105 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`chatFrontmatter > falls back to defaults for missing optional fields 1`] = `
+{
+  "chat_id": null,
+  "created": "2026-03-18T14:46:40Z",
+  "puzle_id": 100,
+  "puzle_type": "chat",
+  "synced": "2026-07-16T12:00:00Z",
+  "title": "",
+}
+`;
+
+exports[`chatFrontmatter > matches the TECH_SPEC 3.4 field set 1`] = `
+{
+  "chat_id": 214,
+  "created": "2026-03-18T14:46:40Z",
+  "puzle_id": 1727,
+  "puzle_type": "chat",
+  "synced": "2026-07-16T12:00:00Z",
+  "title": "关于阅读层次的讨论",
+}
+`;
+
+exports[`renderChatManaged > omits thinking/tool logs when keepThinking is off 1`] = `
+"## 对话
+
+**🙋 我**
+
+> 阅读的四个层次是什么？
+
+**🤖 Puzle**
+
+阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。
+
+**🙋 我**
+
+> 第二层
+> 展开讲讲？
+
+**🤖 Puzle**
+
+检视阅读是在有限时间内抓住全书骨架的阅读方式。"
+`;
+
+exports[`renderChatManaged > renders mapped history turns end to end 1`] = `
+"## 对话
+
+**🙋 我**
+
+> 你好
+
+**🤖 Puzle**
+
+你好！"
+`;
+
+exports[`renderChatManaged > renders thinking/tool logs as a collapsed callout when keepThinking is on 1`] = `
+"## 对话
+
+**🙋 我**
+
+> 阅读的四个层次是什么？
+
+**🤖 Puzle**
+
+阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。
+
+> [!note]- 🧠 思考过程
+> 用户问的是阅读层次，需要拆解四个层次。
+>
+> search_articles({"query":"阅读层次"})
+>
+> search_articles: 命中 3 篇文章
+>
+> 知识库
+> 《如何阅读一本书》有相关章节
+
+**🙋 我**
+
+> 第二层
+> 展开讲讲？
+
+**🤖 Puzle**
+
+检视阅读是在有限时间内抓住全书骨架的阅读方式。"
+`;
+
+exports[`renderThinkingCallout > renders every supported log type 1`] = `
+"> [!note]- 🧠 思考过程
+> 先拆解问题
+>
+> 分四步回答
+>
+> 浏览器
+> 页面已加载
+>
+> search({"q":"阅读"})
+>
+> search: 超时
+>
+> 检索失败，改用本地知识
+>
+> 过渡说明"
+`;

@@ -14,5 +14,10 @@ dist/
 # macOS
 .DS_Store
 
+# 本地工具目录（不入库）
+.claude/
+.orca-reports/
+
 # Orca DAG 规划执行脚本与任务 spec（暂不入库）
-/scripts/
+/scripts/*
+!/scripts/build-template.mjs

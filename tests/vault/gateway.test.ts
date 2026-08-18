@@ -41,6 +41,10 @@ class FakeVault {
 		return this.contents.get(file.path) ?? "";
 	}
 
+	async cachedRead(file: TFile): Promise<string> {
+		return this.read(file);
+	}
+
 	async process(file: TFile, fn: (data: string) => string): Promise<string> {
 		const next = fn(this.contents.get(file.path) ?? "");
 		this.contents.set(file.path, next);

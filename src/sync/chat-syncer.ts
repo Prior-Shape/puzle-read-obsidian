@@ -81,7 +81,8 @@ export class ChatSyncer implements Syncer {
 
 		const response = await socket.requestFullChatHistory(
 			chatId,
-			() => ctx.signal?.aborted === true
+			() => ctx.signal?.aborted === true,
+			probe
 		);
 		if (!response) return "skipped";
 

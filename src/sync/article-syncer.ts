@@ -113,16 +113,12 @@ export class ArticleSyncer implements Syncer {
 	): Promise<ItemOutcome> {
 		const { client, store, settings, shared, vaultGateway } = ctx;
 
-		const detail =
-			item.resource_type === "file"
-				? await client.getFileDetail(item.id)
-				: await client.getLinkDetail(item.id);
-		const summary =
-			item.resource_type === "file"
-				? null
-				: await client.getSummary(item.id).catch(() => null);
-		const highlights = await client.listHighlightsByReading(item.id);
-		const comments = await client.listCommentsByReading(item.id);
+		const [detail, summary, highlights, comments] = await Promise.all([
+			item.resource_type === "file" ? client.getFileDetail(item.id) : client.getLinkDetail(item.id),
+			item.resource_type === "file" ? null : client.getSummary(item.id).catch(() => null),
+			client.listHighlightsByReading(item.id),
+			client.listCommentsByReading(item.id)
+		]);
 
 		const baseName = articleBaseName(item);
 		const prev = store.getArticle(item.id);

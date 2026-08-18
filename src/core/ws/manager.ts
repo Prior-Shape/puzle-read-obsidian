@@ -264,14 +264,19 @@ export class PuzleSocket {
 
 	async requestFullChatHistory(
 		chatId: number,
-		isCancelled?: () => boolean
+		isCancelled?: () => boolean,
+		initial?: WsChatHistoryResponse
 	): Promise<WsChatHistoryResponse | null> {
 		let offset = 0;
 		let allTurns: WsChatTurn[] = [];
 		let last: WsChatHistoryResponse | null = null;
+		// A caller that already fetched page 0 (offset 0, HISTORY_PAGE_LIMIT) can
+		// pass it as `initial` to avoid re-requesting it.
+		let pending: WsChatHistoryResponse | undefined = initial;
 		for (;;) {
 			if (isCancelled?.()) return null;
-			const res = await this.requestChatHistory(chatId, offset, HISTORY_PAGE_LIMIT);
+			const res = pending ?? (await this.requestChatHistory(chatId, offset, HISTORY_PAGE_LIMIT));
+			pending = undefined;
 			if (isCancelled?.()) return null;
 			const turns = res.turns ?? [];
 			allTurns = allTurns.concat(turns);

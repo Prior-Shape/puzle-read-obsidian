@@ -584,6 +584,42 @@ describe("chat convenience methods", () => {
 		expect(result?.has_more).toBe(false);
 	});
 
+	it("requestFullChatHistory reuses a provided first page and only fetches the rest", async () => {
+		const factory = new FakeSocketFactory();
+		const socket = new PuzleSocket(WS_URL, () => TOKEN, factory);
+		await connectSocket(socket, factory);
+
+		const firstPage: WsChatHistoryResponse = {
+			type: "chat_history_response",
+			chat_id: 9,
+			turns: Array.from({ length: HISTORY_PAGE_LIMIT }, (_, i) => ({ turn_id: `turn_${i}`, events: [] })),
+			total: 45,
+			has_more: true
+		};
+		const promise = socket.requestFullChatHistory(9, undefined, firstPage);
+		await flush();
+		expect(factory.last.sent).toHaveLength(1);
+		expect(factory.last.lastSentJson()).toMatchObject({ type: "chat_history", chat_id: 9, offset: 40, limit: 40 });
+
+		factory.last.receive(
+			frame(
+				"system",
+				{
+					type: "chat_history_response",
+					chat_id: 9,
+					turns: Array.from({ length: 5 }, (_, i) => ({ turn_id: `turn_${40 + i}`, events: [] })),
+					total: 45,
+					has_more: false
+				},
+				"evt_page_40"
+			)
+		);
+		const result = await promise;
+		expect(result?.turns).toHaveLength(45);
+		expect(result?.turns[0].turn_id).toBe("turn_0");
+		expect(result?.turns[44].turn_id).toBe("turn_44");
+	});
+
 	it("requestFullChatHistory stops on an empty page even when has_more is true", async () => {
 		const factory = new FakeSocketFactory();
 		const socket = new PuzleSocket(WS_URL, () => TOKEN, factory);

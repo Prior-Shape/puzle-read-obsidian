@@ -95,7 +95,7 @@ export class VaultGateway {
 	async readManagedHash(relativePath: string): Promise<string | null> {
 		const file = this.app.vault.getFileByPath(this.resolve(relativePath));
 		if (!file) return null;
-		const content = await this.app.vault.read(file);
+		const content = await this.app.vault.cachedRead(file);
 		const region = findManagedRegion(content);
 		if (!region) return null;
 		return hashManaged(region.inner);

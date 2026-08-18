@@ -103,12 +103,35 @@ export function mergePluginData(saved: unknown): PluginData {
 	return deepMerge(cloneDefaultPluginData(), saved);
 }
 
+const SAVE_DEBOUNCE_MS = 500;
+
 export class PuzleSettingTab extends PluginSettingTab {
 	private readonly plugin: PuzleReadPlugin;
+	private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(app: App, plugin: PuzleReadPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	hide(): void {
+		this.flushPendingSave();
+	}
+
+	// 输入框每个键击都会触发 onChange；防抖避免每键写盘、重建 client/socket
+	private queueSave(): void {
+		if (this.saveTimer !== null) clearTimeout(this.saveTimer);
+		this.saveTimer = setTimeout(() => {
+			this.saveTimer = null;
+			void this.plugin.saveSettings();
+		}, SAVE_DEBOUNCE_MS);
+	}
+
+	private flushPendingSave(): void {
+		if (this.saveTimer === null) return;
+		clearTimeout(this.saveTimer);
+		this.saveTimer = null;
+		void this.plugin.saveSettings();
 	}
 
 	display(): void {
@@ -123,9 +146,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_SETTINGS.baseUrl)
 					.setValue(settings.baseUrl)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						settings.baseUrl = value.trim();
-						await this.plugin.saveSettings();
+						this.queueSave();
 					});
 			});
 
@@ -138,9 +161,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 				text.inputEl.type = "password";
 				text.setPlaceholder("粘贴 Token")
 					.setValue(settings.token)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						settings.token = value.trim();
-						await this.plugin.saveSettings();
+						this.queueSave();
 					});
 			});
 
@@ -152,9 +175,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_SETTINGS.rootFolder)
 					.setValue(settings.rootFolder)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						settings.rootFolder = value.trim();
-						await this.plugin.saveSettings();
+						this.queueSave();
 					});
 			});
 
@@ -163,10 +186,10 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.setDesc("0 = 关闭自动同步")
 			.addText((text) => {
 				text.inputEl.type = "number";
-				text.setValue(String(settings.autoSyncMinutes)).onChange(async (value: string) => {
+				text.setValue(String(settings.autoSyncMinutes)).onChange((value: string) => {
 					const parsed = Number.parseInt(value, 10);
 					settings.autoSyncMinutes = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-					await this.plugin.saveSettings();
+					this.queueSave();
 				});
 			});
 
@@ -174,9 +197,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.setName("注入高亮锚点")
 			.setDesc("同步文章时在正文中插入 ==高亮== 标记与 💬 角标")
 			.addToggle((toggle) => {
-				toggle.setValue(settings.injectAnchors).onChange(async (value: boolean) => {
+				toggle.setValue(settings.injectAnchors).onChange((value: boolean) => {
 					settings.injectAnchors = value;
-					await this.plugin.saveSettings();
+					this.queueSave();
 				});
 			});
 
@@ -184,9 +207,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.setName("保留思考过程")
 			.setDesc("同步对话时把思考/工具日志渲染为折叠块")
 			.addToggle((toggle) => {
-				toggle.setValue(settings.keepThinking).onChange(async (value: boolean) => {
+				toggle.setValue(settings.keepThinking).onChange((value: boolean) => {
 					settings.keepThinking = value;
-					await this.plugin.saveSettings();
+					this.queueSave();
 				});
 			});
 
@@ -198,9 +221,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 					.addOption("overwrite", "覆盖")
 					.addOption("skip", "跳过")
 					.setValue(settings.onEditedManaged)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						settings.onEditedManaged = value as OnEditedManaged;
-						await this.plugin.saveSettings();
+						this.queueSave();
 					});
 			});
 
@@ -209,11 +232,11 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.setDesc("AI 续写时取光标前文本的字符上限")
 			.addText((text) => {
 				text.inputEl.type = "number";
-				text.setValue(String(settings.continueMaxChars)).onChange(async (value: string) => {
+				text.setValue(String(settings.continueMaxChars)).onChange((value: string) => {
 					const parsed = Number.parseInt(value, 10);
 					settings.continueMaxChars =
 						Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SETTINGS.continueMaxChars;
-					await this.plugin.saveSettings();
+					this.queueSave();
 				});
 			});
 
@@ -231,6 +254,7 @@ export class PuzleSettingTab extends PluginSettingTab {
 	}
 
 	private async testConnection(button: ButtonComponent): Promise<void> {
+		this.flushPendingSave();
 		const { baseUrl, token } = this.plugin.data.settings;
 		button.setDisabled(true);
 		button.setButtonText("测试中…");

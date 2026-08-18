@@ -12,6 +12,7 @@ import {
 	type Syncer
 } from "./engine";
 import { articleFrontmatter, renderArticleManaged, sortComments } from "./render/article";
+import { normalizeArticleContent } from "./render/html";
 
 export const EARLY_STOP_PAGES = 2;
 
@@ -136,7 +137,8 @@ export class ArticleSyncer implements Syncer {
 			}
 		}
 
-		let body = detail.content ?? "";
+		// 后端正文是 HTML，先转成 Markdown 再注入锚点/写入笔记
+		let body = normalizeArticleContent(detail.content);
 		if (settings.injectAnchors) {
 			const anchors: AnchorHighlight[] = highlights
 				.filter(

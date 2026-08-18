@@ -228,11 +228,12 @@ describe("ChatController streaming", () => {
 
 		harness.controller.send("  阅读的四个层次是什么？  ");
 
-		expect(harness.ws.lastSentJson()).toEqual({
+		expect(harness.ws.lastSentJson()).toMatchObject({
 			type: "chat_completion",
 			chat_id: null,
 			content: "阅读的四个层次是什么？"
 		});
+		expect(typeof harness.ws.lastSentJson().client_request_id).toBe("string");
 		const active = harness.latest().active;
 		expect(active.chatId).toBeNull();
 		expect(active.streaming).toBe(true);
@@ -371,6 +372,42 @@ describe("ChatController streaming", () => {
 		const active = harness.latest().active;
 		expect(active.streaming).toBe(false);
 		expect(active.error).toBe("服务繁忙");
+	});
+
+	it("ignores acks and mid-stream events belonging to another consumer (AI 续写)", async () => {
+		const harness = await createHarness();
+		harness.controller.send("你好");
+		const requestId = harness.ws.lastSentJson().client_request_id as string;
+
+		// 续写器的 ack：client_request_id 不匹配，不应认领
+		harness.ws.receive(
+			frame(
+				"system",
+				{ type: "chat_completion_ack", chat_id: 900, request: { client_request_id: "puzle-continue-x" } },
+				"evt_ack_other"
+			)
+		);
+		expect(harness.latest().active.chatId).toBeNull();
+
+		// 续写器已在流式中的 message 事件（无 turn_start）也不应被认领
+		harness.ws.receive(
+			frame(
+				"chat",
+				{ type: "message", chat_id: 900, turn_id: "turn_w", detail: { type: "text", marker: "delta", delta: "续写内容" } },
+				"evt_w1"
+			)
+		);
+		expect(harness.latest().active.messages).toHaveLength(1);
+
+		// 自己的 ack 正常认领
+		harness.ws.receive(
+			frame(
+				"system",
+				{ type: "chat_completion_ack", chat_id: 42, request: { client_request_id: requestId } },
+				"evt_ack_mine"
+			)
+		);
+		expect(harness.latest().active.chatId).toBe(42);
 	});
 
 	it("resets streaming with an error when the connection is lost mid-turn", async () => {

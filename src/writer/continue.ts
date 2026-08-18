@@ -19,8 +19,11 @@ export function extractContinuePrefix(textBeforeCursor: string, maxChars: number
 	return textBeforeCursor.slice(-limit);
 }
 
+export const GUARD_CHARS = 32;
+
 export interface ContinueWriterEditor {
 	replaceRange(text: string, from: number, to: number): void;
+	getRange(from: number, to: number): string;
 }
 
 export interface ContinuationChatStore {
@@ -48,6 +51,9 @@ export class ContinueWriter {
 	private editor: ContinueWriterEditor | null = null;
 	private insertStart = 0;
 	private insertEnd = 0;
+	private insertedText = "";
+	private guardText = "";
+	private guardFrom = 0;
 	private disposed = false;
 
 	constructor(socket: PuzleSocket, store: ContinuationChatStore, options: ContinueWriterOptions = {}) {
@@ -73,6 +79,14 @@ export class ContinueWriter {
 		this.editor = editor;
 		this.insertStart = Math.max(0, insertAt);
 		this.insertEnd = this.insertStart;
+		this.insertedText = "";
+		this.guardFrom = Math.max(0, this.insertStart - GUARD_CHARS);
+		try {
+			this.guardText = editor.getRange(this.guardFrom, this.insertStart);
+		} catch {
+			this.guardText = "";
+			this.guardFrom = this.insertStart;
+		}
 		this.chatId = this.store.continuationChatId;
 		this.stopping = false;
 		this.requestId = `puzle-continue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -169,18 +183,32 @@ export class ContinueWriter {
 	private applyText(detail: TextLog): void {
 		const editor = this.editor;
 		if (!editor) return;
+		if (!this.editorIntact(editor)) {
+			this.abortForEditorChange();
+			return;
+		}
+		try {
+			this.applyTextEdit(editor, detail);
+		} catch {
+			this.abortForEditorChange();
+		}
+	}
+
+	private applyTextEdit(editor: ContinueWriterEditor, detail: TextLog): void {
 		const marker = detail.marker;
 		if (marker === "started" || marker === "delta") {
 			const delta = detail.delta ?? "";
 			if (!delta) return;
 			editor.replaceRange(delta, this.insertEnd, this.insertEnd);
 			this.insertEnd += delta.length;
+			this.insertedText += delta;
 			return;
 		}
 		if (marker === "hidden") {
 			if (this.insertEnd > this.insertStart) {
 				editor.replaceRange("", this.insertStart, this.insertEnd);
 				this.insertEnd = this.insertStart;
+				this.insertedText = "";
 			}
 			return;
 		}
@@ -188,7 +216,31 @@ export class ContinueWriter {
 		if (marker === "completed" || marker === "full" || full) {
 			editor.replaceRange(full, this.insertStart, this.insertEnd);
 			this.insertEnd = this.insertStart + full.length;
+			this.insertedText = full;
 		}
+	}
+
+	/**
+	 * The insertion range and a short stretch of text before it must still read
+	 * back exactly what we wrote; any divergence means the user edited the
+	 * document mid-stream and our offsets can no longer be trusted.
+	 */
+	private editorIntact(editor: ContinueWriterEditor): boolean {
+		try {
+			return (
+				editor.getRange(this.guardFrom, this.insertStart) === this.guardText &&
+				editor.getRange(this.insertStart, this.insertEnd) === this.insertedText
+			);
+		} catch {
+			return false;
+		}
+	}
+
+	private abortForEditorChange(): void {
+		const chatId = this.chatId;
+		this.resetTurn();
+		if (chatId !== null) this.socket.stopCompletion(chatId);
+		this.options.notice?.("检测到文档被编辑，续写已中止");
 	}
 
 	private handleError(event: WsEvent): void {

@@ -54,7 +54,8 @@ export function registerWriterFeature(plugin: Plugin, deps: PluginDeps): void {
 		const editorPort: ContinueWriterEditor = {
 			replaceRange: (text, from, to) => {
 				editor.replaceRange(text, editor.offsetToPos(from), editor.offsetToPos(to));
-			}
+			},
+			getRange: (from, to) => editor.getRange(editor.offsetToPos(from), editor.offsetToPos(to))
 		};
 		writer.start(editorPort, insertAt, prefix);
 	};

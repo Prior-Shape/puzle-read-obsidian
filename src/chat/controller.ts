@@ -71,6 +71,7 @@ export class ChatController {
 	private generation = 0;
 	private sessionLoadGeneration = 0;
 	private streamChatId: number | null = null;
+	private requestId = "";
 	private disposed = false;
 
 	constructor(
@@ -185,6 +186,7 @@ export class ChatController {
 		this.generation += 1;
 		this.reducer.reset();
 		this.streamChatId = active.chatId;
+		this.requestId = `puzle-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 		const userMessage: ChatMessage = {
 			id: `user-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 			role: "user",
@@ -199,7 +201,11 @@ export class ChatController {
 				error: null
 			}
 		});
-		this.socket.sendChatCompletion({ chat_id: active.chatId, content });
+		this.socket.sendChatCompletion({
+			chat_id: active.chatId,
+			content,
+			client_request_id: this.requestId
+		});
 	}
 
 	stop(): void {
@@ -261,6 +267,12 @@ export class ChatController {
 		const chatId = typeof event.chat_id === "number" ? event.chat_id : null;
 		if (chatId === null) return;
 		if (this.streamChatId !== null) return;
+		// The ack may belong to another consumer on the shared socket (AI 续写);
+		// only adopt it when the echoed client_request_id matches ours.
+		const request = event.request as { client_request_id?: unknown } | undefined;
+		const ackRequestId =
+			request && typeof request.client_request_id === "string" ? request.client_request_id : null;
+		if (ackRequestId !== null && ackRequestId !== this.requestId) return;
 		this.streamChatId = chatId;
 		if (active.chatId === null) {
 			this.setState({ active: { ...active, chatId } });
@@ -275,6 +287,10 @@ export class ChatController {
 		const eventChatId = typeof event.chat_id === "number" ? event.chat_id : undefined;
 		if (eventChatId !== undefined) {
 			if (this.streamChatId === null) {
+				// Fallback when the ack is lost: only a turn_start may claim the
+				// stream, so mid-stream events of another consumer's turn (AI 续写)
+				// are not adopted by mistake.
+				if (event.type !== "turn_start") return;
 				this.adoptStreamChatId(eventChatId);
 			} else if (eventChatId !== this.streamChatId) {
 				return;

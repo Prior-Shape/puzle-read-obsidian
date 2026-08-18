@@ -88,6 +88,10 @@ class FakeEditor implements ContinueWriterEditor {
 		this.calls.push({ text, from, to });
 		this.text = this.text.slice(0, from) + text + this.text.slice(to);
 	}
+
+	getRange(from: number, to: number): string {
+		return this.text.slice(from, to);
+	}
 }
 
 function frame(category: string, event: Record<string, unknown>, eventId?: string): string {
@@ -135,6 +139,56 @@ function receiveText(harness: Harness, chatId: number, detail: Record<string, un
 		)
 	);
 }
+
+describe("ContinueWriter editor integrity", () => {
+	it("aborts and stops the completion when the user edits before the insert point", async () => {
+		const harness = await createHarness(321);
+		const editor = new FakeEditor("开头的前文");
+		harness.writer.start(editor, editor.text.length, "开头的前文");
+		startTurn(harness, 321);
+		receiveText(harness, 321, { type: "text", marker: "started", delta: "续写A" }, "evt_d1");
+		expect(editor.text).toBe("开头的前文续写A");
+
+		// 用户在插入点之前插入文本，所有 offset 失效
+		editor.text = "插入!" + editor.text;
+		receiveText(harness, 321, { type: "text", marker: "delta", delta: "续写B" }, "evt_d2");
+
+		expect(harness.writer.isRunning).toBe(false);
+		expect(editor.text).toBe("插入!开头的前文续写A");
+		expect(harness.ws.lastSentJson()).toEqual({ type: "stop_completion", chat_id: 321 });
+		expect(harness.notices).toContain("检测到文档被编辑，续写已中止");
+	});
+
+	it("keeps streaming when the user edits after the insertion range", async () => {
+		const harness = await createHarness(321);
+		const editor = new FakeEditor("前文——后记");
+		harness.writer.start(editor, 2, "前文");
+		startTurn(harness, 321);
+		receiveText(harness, 321, { type: "text", marker: "started", delta: "续写A" }, "evt_d1");
+		expect(editor.text).toBe("前文续写A——后记");
+
+		// 在插入范围之后追加内容不影响 offset
+		editor.text += "（用户追加）";
+		receiveText(harness, 321, { type: "text", marker: "delta", delta: "续写B" }, "evt_d2");
+
+		expect(harness.writer.isRunning).toBe(true);
+		expect(editor.text).toBe("前文续写A续写B——后记（用户追加）");
+	});
+
+	it("aborts when the editor throws on insert", async () => {
+		const harness = await createHarness(321);
+		const editor = new FakeEditor("前文");
+		harness.writer.start(editor, 2, "前文");
+		startTurn(harness, 321);
+		editor.replaceRange = () => {
+			throw new Error("editor detached");
+		};
+		receiveText(harness, 321, { type: "text", marker: "started", delta: "续写" }, "evt_d1");
+
+		expect(harness.writer.isRunning).toBe(false);
+		expect(harness.notices).toContain("检测到文档被编辑，续写已中止");
+	});
+});
 
 describe("ContinueWriter connection loss", () => {
 	it("stops the run with a notice when the connection is lost mid-stream", async () => {

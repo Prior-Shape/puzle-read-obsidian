@@ -116,6 +116,7 @@ export class PuzleSettingTab extends PluginSettingTab {
 
 	hide(): void {
 		this.flushPendingSave();
+		super.hide();
 	}
 
 	// 输入框每个键击都会触发 onChange；防抖避免每键写盘、重建 client/socket

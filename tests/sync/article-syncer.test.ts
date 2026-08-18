@@ -309,16 +309,19 @@ describe("ArticleSyncer incremental decisions", () => {
 			expect(client.listCalls).toEqual([1, 2, 3]);
 		});
 
-		it("full mode walks every page and syncs the changed item", async () => {
-			buildPages(150, 120);
+		it("full mode walks every page and re-syncs everything, ignoring fingerprints", async () => {
+			const items = buildPages(150, 120);
+			for (const item of items) {
+				if (!client.details.has(item.id)) client.details.set(item.id, makeDetail(item));
+			}
 
 			const syncer = new ArticleSyncer();
 			const report = await syncer.sync(
 				makeCtx({ client, gateway, store, mode: "full", notices })
 			);
 
-			expect(report).toMatchObject({ skipped: 149, created: 1 });
-			expect(client.detailCalls).toEqual([120]);
+			expect(report).toMatchObject({ skipped: 0, created: 1, updated: 149, failed: 0 });
+			expect(client.detailCalls).toHaveLength(150);
 			expect(client.listCalls).toEqual([1, 2, 3]);
 		});
 

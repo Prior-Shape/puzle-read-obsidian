@@ -74,7 +74,10 @@ export class ChatSyncer implements Syncer {
 		const probe = await socket.requestChatHistory(chatId, 0, HISTORY_PAGE_LIMIT);
 		const total = resolveTurnTotal(probe);
 		const prev = store.getChat(chatId);
-		if (prev && total !== null && prev.turnCount === total) return "skipped";
+		// 回合数短路只用于增量：全量同步无条件重建
+		if (ctx.mode === "incremental" && prev && total !== null && prev.turnCount === total) {
+			return "skipped";
+		}
 
 		const response = await socket.requestFullChatHistory(
 			chatId,

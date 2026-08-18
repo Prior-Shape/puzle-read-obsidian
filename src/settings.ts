@@ -131,7 +131,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Token")
-			.setDesc("Web 端登录后从浏览器 localStorage 的 puzle_auth_token 获取")
+			.setDesc(
+				"Web 端登录后从浏览器 localStorage 的 puzle_auth_token 获取。注意：Token 以明文保存在本 Vault 的插件数据文件（data.json）中，请勿把该文件同步到不信任的位置"
+			)
 			.addText((text) => {
 				text.inputEl.type = "password";
 				text.setPlaceholder("粘贴 Token")
@@ -144,7 +146,9 @@ export class PuzleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("根目录")
-			.setDesc("同步内容在 Vault 中的根文件夹")
+			.setDesc(
+				"同步内容在 Vault 中的根文件夹。已有同步内容时请先在 Obsidian 里重命名原文件夹（插件会自动跟踪），再修改此处；直接修改会在新目录下重新同步一份，旧目录内容原样保留"
+			)
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_SETTINGS.rootFolder)
 					.setValue(settings.rootFolder)

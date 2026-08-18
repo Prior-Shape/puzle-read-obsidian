@@ -18,8 +18,6 @@ export interface MessageListProps {
 export function MessageList({ app, messages, streaming, loading, error, keepThinking }: MessageListProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const stickRef = useRef(true);
-	const streamingRef = useRef(streaming);
-	streamingRef.current = streaming;
 
 	const scrollToBottom = () => {
 		const el = containerRef.current;
@@ -27,14 +25,16 @@ export function MessageList({ app, messages, streaming, loading, error, keepThin
 	};
 
 	useEffect(() => {
-		scrollToBottom();
-	}, [messages]);
+		// 切换会话（进入加载态或清空）时恢复吸底；流式期间用户上滚后不再强制拉回
+		if (loading || messages.length === 0) stickRef.current = true;
+		if (stickRef.current) scrollToBottom();
+	}, [messages, loading]);
 
 	useEffect(() => {
 		const el = containerRef.current;
 		if (!el) return;
 		const observer = new ResizeObserver(() => {
-			if (streamingRef.current || stickRef.current) scrollToBottom();
+			if (stickRef.current) scrollToBottom();
 		});
 		observer.observe(el);
 		return () => observer.disconnect();

@@ -66,12 +66,15 @@ export function registerSyncFeature(plugin: Plugin, deps: PluginDeps): void {
 		}
 	});
 
-	const autoSyncMinutes = deps.getSettings().autoSyncMinutes;
-	if (autoSyncMinutes > 0) {
-		plugin.registerInterval(
-			window.setInterval(() => {
-				void engine.runSync("incremental");
-			}, autoSyncMinutes * 60 * 1000)
-		);
-	}
+	// 每分钟读取一次设置判断是否到期，autoSyncMinutes 的修改即时生效，无需重启
+	let lastAutoSyncAt = Date.now();
+	plugin.registerInterval(
+		window.setInterval(() => {
+			const minutes = deps.getSettings().autoSyncMinutes;
+			if (minutes <= 0) return;
+			if (Date.now() - lastAutoSyncAt < minutes * 60 * 1000) return;
+			lastAutoSyncAt = Date.now();
+			void engine.runSync("incremental");
+		}, 60 * 1000)
+	);
 }

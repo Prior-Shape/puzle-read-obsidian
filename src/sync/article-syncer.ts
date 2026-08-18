@@ -83,7 +83,9 @@ export class ArticleSyncer implements Syncer {
 
 			const fingerprint = articleFingerprint(item);
 			const prev = store.getArticle(item.id);
-			if (prev && prev.fingerprint === fingerprint) {
+			// 指纹短路只用于增量：全量同步无条件重建，兜底指纹覆盖不到的
+			// 变化（如高亮属性编辑不改变计数）
+			if (ctx.mode === "incremental" && prev && prev.fingerprint === fingerprint) {
 				report.skipped += 1;
 				continue;
 			}

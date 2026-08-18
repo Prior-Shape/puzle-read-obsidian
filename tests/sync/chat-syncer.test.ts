@@ -139,6 +139,21 @@ describe("ChatSyncer decisions", () => {
 		expect(gateway.writes).toEqual([]);
 	});
 
+	it("full mode re-syncs a chat even when the turn count matches the store", async () => {
+		seedChat(214, 2);
+		socket.firstPages.set(214, makeHistoryResponse({ total: 2, turns: TWO_TURNS.slice(0, 1) }));
+		socket.fullHistories.set(214, makeHistoryResponse({ total: 2, turns: TWO_TURNS }));
+		client.pages = [[makeChatItem()]];
+
+		const report = await new ChatSyncer(() => socket.asSocket()).sync(
+			makeCtx({ client, socket, gateway, store, notices, mode: "full" })
+		);
+
+		expect(report).toMatchObject({ skipped: 0, created: 0, updated: 1, failed: 0 });
+		expect(socket.fullHistoryCalls).toEqual([214]);
+		expect(gateway.writes).toHaveLength(1);
+	});
+
 	it("ignores non-chat items entirely", async () => {
 		client.pages = [[makeItem({ id: 1, resource_type: "link" })]];
 

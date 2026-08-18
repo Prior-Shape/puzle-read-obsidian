@@ -45,13 +45,15 @@
 其他设置项：同步根目录（默认 `PuzleRead`）、自动同步间隔（默认关闭）、是否在正文注入高亮锚点、对话是否保留思考过程、managed 区被本地编辑后的写入策略、续写上下文字符上限。
 
 > Token 过期后接口会返回 401，插件会弹出「Token 已失效」提示，重新粘贴新 Token 即可。
+>
+> 安全提示：Token 以明文保存在 Vault 的 `.obsidian/plugins/puzle-read/data.json` 中。若你把 Vault 同步到云端或提交到 git，请注意不要泄露该文件。
 
 ## 使用
 
 ### 同步
 
 - 命令：`Puzle Read: 全量同步` / `Puzle Read: 增量同步` / `Puzle Read: 初始化工作区`。
-- 增量同步只拉取有变化的条目；也可在设置里开启定时自动同步。
+- 增量同步只拉取有变化的条目；全量同步无条件重建全部内容（可用于修复本地与远端不一致）。也可在设置里开启定时自动同步，修改间隔即时生效。
 - 每个同步文件中 `%% puzle:begin %%` 与 `%% puzle:end %%` 之间的内容由插件维护，请勿编辑；区外内容完全属于你，同步永不触碰。文件可随意重命名 / 移动，插件按 frontmatter 中的 id 定位。
 - 打开 `PuzleRead/Articles.base` / `PuzleRead/Highlights.base` 即可用数据库视图浏览全部文章与高亮。
 

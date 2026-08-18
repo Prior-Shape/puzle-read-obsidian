@@ -75,7 +75,7 @@ export function normalizeFrame(data: unknown): NormalizedFrame | null {
 }
 
 export class PuzleSocket {
-	private readonly wsUrl: string;
+	private readonly wsUrl: string | (() => string);
 	private readonly tokenProvider: TokenProvider;
 	private readonly factory: SocketFactory;
 	private readonly logger?: Logger;
@@ -93,15 +93,17 @@ export class PuzleSocket {
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectAttempts = 0;
 	private disposed = false;
+	private socketOpened = false;
 	private messageQueue: string[] = [];
 	private readonly recentEventIds: string[] = [];
 	private readonly recentEventIdSet = new Set<string>();
 	private readonly categoryListeners = new Map<string, Set<WsEventListener>>();
 	private readonly typeListeners = new Map<string, Set<WsEventListener>>();
+	private readonly connectionLostListeners = new Set<() => void>();
 	private readonly pendingRequests = new Set<PendingRequest>();
 
 	constructor(
-		wsUrl: string,
+		wsUrl: string | (() => string),
 		tokenProvider: TokenProvider,
 		socketFactory: SocketFactory,
 		options: PuzleSocketOptions = {}
@@ -138,17 +140,29 @@ export class PuzleSocket {
 
 	disconnect(): void {
 		this.disposed = true;
-		this.clearReconnectTimer();
-		this.stopHeartbeat();
-		this.failPendingRequests(new Error("PuzleSocket disconnected"));
-		this.failConnection(new Error("PuzleSocket disconnected"));
-		this.detachSocket();
-		this.messageQueue = [];
-		this.reconnectAttempts = 0;
+		this.teardown(new Error("PuzleSocket disconnected"));
+	}
+
+	/**
+	 * Tears down the current connection (dropping queued messages) without
+	 * disposing the instance, so credential/URL providers are re-read on the
+	 * next connect. Used after settings changes.
+	 */
+	refresh(): void {
+		if (this.disposed) return;
+		this.teardown(new Error("PuzleSocket refreshed"));
 	}
 
 	on(category: UserFrontEventCategory, listener: WsEventListener): Unsubscribe {
 		return this.addListener(this.categoryListeners, category, listener);
+	}
+
+	/** Fires whenever an established connection (or its queued messages) is lost. */
+	onConnectionLost(listener: () => void): Unsubscribe {
+		this.connectionLostListeners.add(listener);
+		return () => {
+			this.connectionLostListeners.delete(listener);
+		};
 	}
 
 	onType(type: string, listener: WsEventListener): Unsubscribe {
@@ -263,6 +277,8 @@ export class PuzleSocket {
 			allTurns = allTurns.concat(turns);
 			last = res;
 			if (!res.has_more) break;
+			// An empty page with has_more=true would never advance the offset.
+			if (turns.length === 0) break;
 			offset += turns.length;
 			if (offset >= MAX_HISTORY_TURNS) break;
 		}
@@ -270,13 +286,37 @@ export class PuzleSocket {
 		return { ...last, turns: allTurns };
 	}
 
+	private teardown(reason: Error): void {
+		this.clearReconnectTimer();
+		this.stopHeartbeat();
+		const hadConnection = this.socket !== null || this.messageQueue.length > 0;
+		this.failPendingRequests(reason);
+		this.failConnection(reason);
+		this.detachSocket();
+		this.messageQueue = [];
+		this.reconnectAttempts = 0;
+		if (hadConnection) this.notifyConnectionLost();
+	}
+
+	private notifyConnectionLost(): void {
+		for (const listener of [...this.connectionLostListeners]) {
+			try {
+				listener();
+			} catch (err) {
+				this.logger?.error("[ws] connection-lost listener error", err);
+			}
+		}
+	}
+
 	private openSocket(): void {
 		this.detachSocket();
+		this.socketOpened = false;
 		const token = this.tokenProvider();
 		const protocols = token ? [AUTH_PROTOCOL_PREFIX + token] : undefined;
+		const url = typeof this.wsUrl === "function" ? this.wsUrl() : this.wsUrl;
 		let socket: WebSocketLike;
 		try {
-			socket = this.factory.create(this.wsUrl, protocols);
+			socket = this.factory.create(url, protocols);
 		} catch (err) {
 			this.failConnection(err instanceof Error ? err : new Error(String(err)));
 			return;
@@ -304,6 +344,7 @@ export class PuzleSocket {
 	}
 
 	private handleOpen(): void {
+		this.socketOpened = true;
 		this.reconnectAttempts = 0;
 		this.clearReconnectTimer();
 		this.startHeartbeat();
@@ -316,6 +357,8 @@ export class PuzleSocket {
 
 	private handleClose(ev: { code?: number; reason?: string } | undefined): void {
 		const code = ev?.code;
+		const wasOpen = this.socketOpened;
+		this.socketOpened = false;
 		this.stopHeartbeat();
 		this.socket = null;
 		this.failPendingRequests(new Error(`WebSocket closed${typeof code === "number" ? `: ${code}` : ""}`));
@@ -325,10 +368,14 @@ export class PuzleSocket {
 			this.failConnection(
 				code === 4001 ? new Error("Authentication failed") : new Error("WebSocket closed: 1000")
 			);
+			this.notifyConnectionLost();
 			return;
 		}
 		this.failConnection(new Error(`WebSocket closed: ${code ?? "unknown"}`));
 		this.scheduleReconnect();
+		// A drop before the socket ever opened keeps the outbound queue for the
+		// next attempt, so only an established connection counts as "lost".
+		if (wasOpen) this.notifyConnectionLost();
 	}
 
 	private handleError(): void {

@@ -136,6 +136,23 @@ function receiveText(harness: Harness, chatId: number, detail: Record<string, un
 	);
 }
 
+describe("ContinueWriter connection loss", () => {
+	it("stops the run with a notice when the connection is lost mid-stream", async () => {
+		const harness = await createHarness(321);
+		const editor = new FakeEditor("前文");
+		harness.writer.start(editor, 2, "前文");
+		startTurn(harness, 321);
+		receiveText(harness, 321, { type: "text", marker: "started", delta: "续写" }, "evt_d1");
+		expect(harness.writer.isRunning).toBe(true);
+
+		harness.ws.close(1006);
+
+		expect(harness.writer.isRunning).toBe(false);
+		expect(harness.notices).toContain("连接已断开，续写中止");
+		expect(harness.runningStates).toEqual([true, false]);
+	});
+});
+
 describe("continue prompt helpers", () => {
 	it("buildContinuePrompt uses the fixed template", () => {
 		expect(buildContinuePrompt("一些前文")).toBe(

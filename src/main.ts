@@ -61,7 +61,7 @@ export default class PuzleReadPlugin extends Plugin {
 	getSocket(): PuzleSocket {
 		if (!this.socket) {
 			this.socket = new PuzleSocket(
-				deriveWsUrl(this.data.settings.baseUrl),
+				() => deriveWsUrl(this.data.settings.baseUrl),
 				() => this.data.settings.token,
 				this.socketFactory,
 				{ logger: this.logger }
@@ -81,9 +81,8 @@ export default class PuzleReadPlugin extends Plugin {
 		if (this.client && key === this.clientKey) return;
 		this.clientKey = key;
 		this.client = new PuzleClient(baseUrl, token, this.httpPort);
-		if (this.socket) {
-			this.socket.disconnect();
-			this.socket = null;
-		}
+		// The socket instance lives for the whole plugin lifetime; refresh tears
+		// down the connection so the URL/token providers are re-read on reconnect.
+		this.socket?.refresh();
 	}
 }

@@ -62,7 +62,7 @@ function errorMessage(err: unknown): string {
 
 export class ChatController {
 	private readonly socket: PuzleSocket;
-	private readonly client: PuzleClient;
+	private readonly clientSource: PuzleClient | (() => PuzleClient);
 	private readonly options: ChatControllerOptions;
 	private readonly listeners = new Set<ChatStateListener>();
 	private readonly reducer = new TurnStreamReducer();
@@ -73,14 +73,23 @@ export class ChatController {
 	private streamChatId: number | null = null;
 	private disposed = false;
 
-	constructor(socket: PuzleSocket, client: PuzleClient, options: ChatControllerOptions = {}) {
+	constructor(
+		socket: PuzleSocket,
+		client: PuzleClient | (() => PuzleClient),
+		options: ChatControllerOptions = {}
+	) {
 		this.socket = socket;
-		this.client = client;
+		this.clientSource = client;
 		this.options = options;
 		this.unsubscribers.push(
 			socket.onType("chat_completion_ack", (event) => this.handleAck(event)),
-			socket.on("chat", (event) => this.handleChatEvent(event as ChatStreamEvent))
+			socket.on("chat", (event) => this.handleChatEvent(event as ChatStreamEvent)),
+			socket.onConnectionLost(() => this.handleConnectionLost())
 		);
+	}
+
+	private get client(): PuzleClient {
+		return typeof this.clientSource === "function" ? this.clientSource() : this.clientSource;
 	}
 
 	getState(): ChatControllerState {
@@ -223,6 +232,26 @@ export class ChatController {
 				this.options.logger?.error("[chat] state listener error", err);
 			}
 		}
+	}
+
+	private handleConnectionLost(): void {
+		if (this.disposed) return;
+		const active = this.state.active;
+		if (!active.streaming) return;
+		const messages = [...active.messages];
+		const last = messages[messages.length - 1];
+		if (isStreamingMessage(last)) {
+			if (last.content || last.logs || last.taskOutputs) {
+				messages[messages.length - 1] = { ...last, id: `assistant-interrupted-${last.turnId || Date.now()}` };
+			} else {
+				messages.pop();
+			}
+		}
+		this.streamChatId = null;
+		this.reducer.reset();
+		this.setState({
+			active: { ...active, messages, streaming: false, error: "连接已断开，本次回复中断，请重试" }
+		});
 	}
 
 	private handleAck(event: WsEvent): void {

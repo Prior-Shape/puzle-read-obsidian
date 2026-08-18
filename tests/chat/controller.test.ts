@@ -373,6 +373,44 @@ describe("ChatController streaming", () => {
 		expect(active.error).toBe("服务繁忙");
 	});
 
+	it("resets streaming with an error when the connection is lost mid-turn", async () => {
+		const harness = await createHarness();
+		harness.controller.send("你好");
+		harness.ws.receive(frame("system", { type: "chat_completion_ack", chat_id: 42 }, "evt_ack"));
+		harness.ws.receive(frame("chat", { type: "turn_start", chat_id: 42, turn_id: "turn_1" }, "evt_1"));
+		harness.ws.receive(
+			frame(
+				"chat",
+				{ type: "message", chat_id: 42, turn_id: "turn_1", detail: { type: "text", marker: "started", delta: "部分回复" } },
+				"evt_2"
+			)
+		);
+		expect(harness.latest().active.streaming).toBe(true);
+
+		harness.ws.close(1006);
+
+		const active = harness.latest().active;
+		expect(active.streaming).toBe(false);
+		expect(active.error).toContain("连接已断开");
+		const last = active.messages[active.messages.length - 1];
+		expect(last).toMatchObject({ role: "assistant", content: "部分回复" });
+		expect(last.id).not.toMatch(/^streaming-/);
+	});
+
+	it("drops an empty streaming placeholder when the connection is lost", async () => {
+		const harness = await createHarness();
+		harness.controller.send("你好");
+		harness.ws.receive(frame("system", { type: "chat_completion_ack", chat_id: 42 }, "evt_ack"));
+		harness.ws.receive(frame("chat", { type: "turn_start", chat_id: 42, turn_id: "turn_1" }, "evt_1"));
+
+		harness.ws.close(1006);
+
+		const active = harness.latest().active;
+		expect(active.streaming).toBe(false);
+		expect(active.messages).toHaveLength(1);
+		expect(active.messages[0].role).toBe("user");
+	});
+
 	it("ignores send while streaming and empty input", async () => {
 		const harness = await createHarness();
 		harness.controller.send("   ");

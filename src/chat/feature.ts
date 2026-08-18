@@ -1,5 +1,4 @@
 import type { Plugin, Workspace } from "obsidian";
-import type { PuzleClient } from "../core/api/client";
 import type { PuzleSocket } from "../core/ws/manager";
 import type { PluginDeps } from "../deps";
 import { ChatController } from "./controller";
@@ -12,16 +11,13 @@ const OPEN_CHAT_LABEL = "Puzle Read: 打开聊天";
 export function registerChatFeature(plugin: Plugin, deps: PluginDeps): void {
 	let controller: ChatController | null = null;
 	let boundSocket: PuzleSocket | null = null;
-	let boundClient: PuzleClient | null = null;
 
 	const getController = (): ChatController => {
 		const socket = deps.getSocket();
-		const client = deps.getClient();
-		if (!controller || boundSocket !== socket || boundClient !== client) {
+		if (!controller || boundSocket !== socket) {
 			controller?.dispose();
 			boundSocket = socket;
-			boundClient = client;
-			controller = new ChatController(socket, client, { logger: deps.logger });
+			controller = new ChatController(socket, deps.getClient, { logger: deps.logger });
 		}
 		return controller;
 	};
@@ -47,7 +43,6 @@ export function registerChatFeature(plugin: Plugin, deps: PluginDeps): void {
 		controller?.dispose();
 		controller = null;
 		boundSocket = null;
-		boundClient = null;
 	});
 }
 

@@ -322,6 +322,92 @@ describe("reconnect backoff", () => {
 	});
 });
 
+describe("connection lifecycle notifications", () => {
+	it("notifies connection-lost listeners when an established connection drops", async () => {
+		vi.useFakeTimers();
+		try {
+			const factory = new FakeSocketFactory();
+			const socket = new PuzleSocket(WS_URL, () => TOKEN, factory, { random: () => 0.5 });
+			await connectSocket(socket, factory);
+
+			let lost = 0;
+			socket.onConnectionLost(() => {
+				lost += 1;
+			});
+			factory.last.serverClose(1006);
+			expect(lost).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not notify when a pre-open reconnect attempt fails (queue survives)", async () => {
+		vi.useFakeTimers();
+		try {
+			const factory = new FakeSocketFactory();
+			const socket = new PuzleSocket(WS_URL, () => TOKEN, factory, { random: () => 0.5 });
+			let lost = 0;
+			socket.onConnectionLost(() => {
+				lost += 1;
+			});
+
+			socket.sendChatCompletion({ chat_id: null, content: "hi" });
+			factory.last.serverClose(1006);
+			expect(lost).toBe(0);
+
+			vi.advanceTimersByTime(2000);
+			factory.last.open();
+			expect(factory.last.sent).toHaveLength(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("notifies on a terminal close even before open (queue is dropped)", async () => {
+		const factory = new FakeSocketFactory();
+		const socket = new PuzleSocket(WS_URL, () => TOKEN, factory);
+		let lost = 0;
+		socket.onConnectionLost(() => {
+			lost += 1;
+		});
+		socket.sendChatCompletion({ chat_id: null, content: "hi" });
+		factory.last.serverClose(4001);
+		expect(lost).toBe(1);
+	});
+
+	it("refresh tears down the connection but keeps the socket usable with fresh url/token", async () => {
+		vi.useFakeTimers();
+		try {
+			const factory = new FakeSocketFactory();
+			let url = "wss://a.example/api/v1/agent/events";
+			let token = "token-a";
+			const socket = new PuzleSocket(() => url, () => token, factory, { random: () => 0.5 });
+			await connectSocket(socket, factory);
+			expect(factory.last.url).toBe("wss://a.example/api/v1/agent/events");
+
+			let lost = 0;
+			socket.onConnectionLost(() => {
+				lost += 1;
+			});
+			url = "wss://b.example/api/v1/agent/events";
+			token = "token-b";
+			socket.refresh();
+			expect(lost).toBe(1);
+			expect(socket.isConnected).toBe(false);
+
+			vi.advanceTimersByTime(120000);
+			expect(factory.created).toBe(1);
+
+			await connectSocket(socket, factory);
+			expect(factory.created).toBe(2);
+			expect(factory.last.url).toBe("wss://b.example/api/v1/agent/events");
+			expect(factory.last.protocols).toEqual(["puzle-auth-v1.token-b"]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
 describe("request / response pairing", () => {
 	it("sends the request frame and resolves on the matching response", async () => {
 		const factory = new FakeSocketFactory();
@@ -496,6 +582,24 @@ describe("chat convenience methods", () => {
 		expect(result?.turns[0].turn_id).toBe("turn_0");
 		expect(result?.turns[44].turn_id).toBe("turn_44");
 		expect(result?.has_more).toBe(false);
+	});
+
+	it("requestFullChatHistory stops on an empty page even when has_more is true", async () => {
+		const factory = new FakeSocketFactory();
+		const socket = new PuzleSocket(WS_URL, () => TOKEN, factory);
+		await connectSocket(socket, factory);
+
+		const promise = socket.requestFullChatHistory(9);
+		factory.last.receive(
+			frame(
+				"system",
+				{ type: "chat_history_response", chat_id: 9, turns: [], total: 45, has_more: true },
+				"evt_empty"
+			)
+		);
+		const result = await promise;
+		expect(result?.turns).toEqual([]);
+		expect(factory.last.sent.filter((msg) => msg.includes("chat_history"))).toHaveLength(1);
 	});
 
 	it("requestFullChatHistory honours cancellation", async () => {

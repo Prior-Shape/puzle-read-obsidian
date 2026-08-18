@@ -109,8 +109,15 @@ export class ContinueWriter {
 		this.unsubscribers = [
 			this.socket.onType("chat_completion_ack", (event) => this.handleAck(event)),
 			this.socket.on("chat", (event) => this.handleChatEvent(event as ChatStreamEvent)),
-			this.socket.onType("error", (event) => this.handleError(event))
+			this.socket.onType("error", (event) => this.handleError(event)),
+			this.socket.onConnectionLost(() => this.handleConnectionLost())
 		];
+	}
+
+	private handleConnectionLost(): void {
+		if (!this.running) return;
+		this.resetTurn();
+		this.options.notice?.("连接已断开，续写中止");
 	}
 
 	private unsubscribe(): void {

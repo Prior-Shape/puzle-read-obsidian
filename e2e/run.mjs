@@ -114,7 +114,10 @@ const writerStatusVisible = () =>
 		return el.style.display !== 'none' && el.offsetParent !== null;
 	`);
 
-/** 在设置 popout 窗口里点「测试连接」并读取通知（通知渲染在主窗口）。 */
+/**
+ * 在设置 popout 窗口里点「测试连接」并收集通知。
+ * 注意：Notice 渲染在设置窗口内（不是主窗口），且 5s 后自动消失，必须高频轮询。
+ */
 async function clickTestConnection() {
 	await session.evaluate(`app.setting.open(); app.setting.openTabById('puzle-read'); return true;`);
 	const settings = await connectToSettingsWindow();
@@ -129,13 +132,18 @@ async function clickTestConnection() {
 			btn.click();
 			return true;
 		`);
+		for (let i = 0; i < 80; i++) {
+			const list = await settings.evaluate(
+				`return [...document.querySelectorAll('.notice')].map(n => n.innerText);`
+			);
+			if (list.length) return list;
+			await sleep(150);
+		}
+		return [];
 	} finally {
 		settings.close();
 	}
 }
-
-const notices = () =>
-	session.evaluate(`return [...document.querySelectorAll('.notice')].map(n => n.innerText);`);
 
 // ---------------------------------------------------------------- 用例
 
@@ -451,27 +459,18 @@ await (async () => {
 
 	// ============ 5. 设置页 ============
 	await test("设置：测试连接按钮走通鉴权链路", async () => {
-		await clickTestConnection();
-		await waitFor(
-			session,
-			`[...document.querySelectorAll('.notice')].some(n => n.innerText.includes('连接成功'))`,
-			{ timeoutMs: 12000, label: "连接成功提示" }
-		);
-		const list = await notices();
+		const list = await clickTestConnection();
 		console.log(`     通知: ${list.join(" | ")}`);
+		assert(list.some((n) => n.includes("连接成功")), `未出现连接成功提示: ${JSON.stringify(list)}`);
 		assert(list.some((n) => n.includes("e2e-tester")), "未回显 mock 用户名");
 		await session.evaluate(`app.setting.close(); return true;`);
 	});
 
 	await test("设置：token 失效时给出明确提示", async () => {
 		await inPlugin(`p.data.settings.token = 'wrong-token'; await p.saveSettings(); return true;`);
-		await clickTestConnection();
-		await waitFor(
-			session,
-			`[...document.querySelectorAll('.notice')].some(n => n.innerText.includes('Token 已失效'))`,
-			{ timeoutMs: 12000, label: "Token 失效提示" }
-		);
-		console.log("     已提示 Token 已失效");
+		const list = await clickTestConnection();
+		console.log(`     通知: ${list.join(" | ")}`);
+		assert(list.some((n) => n.includes("Token 已失效")), `未提示 Token 失效: ${JSON.stringify(list)}`);
 		await session.evaluate(`app.setting.close(); return true;`);
 		await inPlugin(`p.data.settings.token = 'e2e-valid-token'; await p.saveSettings(); return true;`);
 	});

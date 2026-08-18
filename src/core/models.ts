@@ -7,6 +7,7 @@ export type ArticleStatus =
 	| "viewed"
 	| "interacted"
 	| "done"
+	| "completed"
 	| "fail"
 	| "thinking";
 
@@ -151,8 +152,22 @@ export interface PageResponse<T> {
 	pageSize?: number;
 }
 
+/**
+ * 取条目对应的会话 id。
+ * - link/file 条目：关联会话放在 `chat_id`；
+ * - chat 条目：生产环境根本不返回 `chat_id`，会话 id 就是 `resource_id`（等于 `id`）。
+ *   只认 `chat_id` 会导致所有会话被静默过滤掉。
+ */
+export function resolveChatId(item: ReadingItem): number | null {
+	if (typeof item.chat_id === "number") return item.chat_id;
+	if (item.resource_type !== "chat") return null;
+	if (typeof item.resource_id === "number") return item.resource_id;
+	if (typeof item.id === "number") return item.id;
+	return null;
+}
+
 export function isChatReadingItem(
 	item: ReadingItem
-): item is ReadingItem & { resource_type: "chat"; chat_id: number } {
-	return item.resource_type === "chat" && typeof item.chat_id === "number";
+): item is ReadingItem & { resource_type: "chat" } {
+	return item.resource_type === "chat" && resolveChatId(item) !== null;
 }

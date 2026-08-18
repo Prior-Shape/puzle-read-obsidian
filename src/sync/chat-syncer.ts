@@ -1,4 +1,4 @@
-import { isChatReadingItem } from "../core/models";
+import { isChatReadingItem, resolveChatId } from "../core/models";
 import type { ReadingItem } from "../core/models";
 import { mapChatHistoryResponse } from "../core/ws/history";
 import { HISTORY_PAGE_LIMIT } from "../core/ws/manager";
@@ -16,7 +16,7 @@ import {
 } from "./engine";
 import { chatFrontmatter, renderChatManaged } from "./render/chat";
 
-export type ChatItem = ReadingItem & { resource_type: "chat"; chat_id: number };
+export type ChatItem = ReadingItem & { resource_type: "chat" };
 
 type ItemOutcome = "created" | "updated" | "skipped";
 
@@ -46,18 +46,19 @@ export class ChatSyncer implements Syncer {
 				report.skipped += 1;
 				continue;
 			}
-			if (item.chat_id === store.continuationChatId) {
+			const chatId = resolveChatId(item);
+			if (chatId === null || chatId === store.continuationChatId) {
 				report.skipped += 1;
 				continue;
 			}
 
 			try {
-				const outcome = await this.syncChat(ctx, item);
+				const outcome = await this.syncChat(ctx, item, chatId);
 				report[outcome] += 1;
 			} catch (error) {
 				report.failed += 1;
 				ctx.notice(
-					`Puzle Read：对话「${item.title ?? item.chat_id}」同步失败：${errorMessage(error)}`
+					`Puzle Read：对话「${item.title ?? chatId}」同步失败：${errorMessage(error)}`
 				);
 			}
 		}
@@ -66,9 +67,8 @@ export class ChatSyncer implements Syncer {
 		return report;
 	}
 
-	private async syncChat(ctx: SyncContext, item: ChatItem): Promise<ItemOutcome> {
+	private async syncChat(ctx: SyncContext, item: ChatItem, chatId: number): Promise<ItemOutcome> {
 		const { store, settings, vaultGateway } = ctx;
-		const chatId = item.chat_id;
 		const socket = this.getSocket();
 
 		const probe = await socket.requestChatHistory(chatId, 0, HISTORY_PAGE_LIMIT);
@@ -108,7 +108,7 @@ export class ChatSyncer implements Syncer {
 		});
 		const file = await vaultGateway.writeManaged(
 			relative,
-			chatFrontmatter(item, title, ctx.now),
+			chatFrontmatter(item, title, ctx.now, chatId),
 			managed
 		);
 		const managedHash =

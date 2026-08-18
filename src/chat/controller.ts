@@ -1,5 +1,5 @@
 import type { PuzleClient } from "../core/api/client";
-import { isChatReadingItem } from "../core/models";
+import { isChatReadingItem, resolveChatId } from "../core/models";
 import type { Logger } from "../core/ports";
 import type { ChatMessage } from "../core/ws/history";
 import { mapChatHistoryResponse } from "../core/ws/history";
@@ -113,9 +113,11 @@ export class ChatController {
 			for await (const item of this.client.iterateAllReadingItems()) {
 				if (this.disposed || generation !== this.sessionLoadGeneration) return;
 				if (!isChatReadingItem(item)) continue;
+				const chatId = resolveChatId(item);
+				if (chatId === null) continue;
 				sessions.push({
-					chatId: item.chat_id,
-					title: item.title?.trim() || `对话 ${item.chat_id}`,
+					chatId,
+					title: item.title?.trim() || `对话 ${chatId}`,
 					status: item.status ?? null,
 					createdTime: item.created_time ?? null
 				});

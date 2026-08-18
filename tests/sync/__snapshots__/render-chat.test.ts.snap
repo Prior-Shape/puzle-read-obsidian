@@ -2,7 +2,7 @@
 
 exports[`chatFrontmatter > falls back to defaults for missing optional fields 1`] = `
 {
-  "chat_id": null,
+  "chat_id": 502,
   "created": "2026-03-18T14:46:40Z",
   "puzle_id": 100,
   "puzle_type": "chat",

@@ -49,14 +49,20 @@ describe("chatFrontmatter", () => {
 			title: "关于阅读层次的讨论",
 			created_time: "2026-03-18T14:46:40Z"
 		});
-		const fm = chatFrontmatter(item, "关于阅读层次的讨论", SYNCED_AT);
+		const fm = chatFrontmatter(item, "关于阅读层次的讨论", SYNCED_AT, 214);
 		expect(fm).toMatchSnapshot();
 		expect(Object.keys(fm)).toEqual(["puzle_type", "chat_id", "puzle_id", "title", "created", "synced"]);
 	});
 
 	it("falls back to defaults for missing optional fields", () => {
 		const item = makeItem({ id: 502, resource_type: "chat", chat_id: null, title: null });
-		expect(chatFrontmatter(item, "", SYNCED_AT)).toMatchSnapshot();
+		expect(chatFrontmatter(item, "", SYNCED_AT, 502)).toMatchSnapshot();
+	});
+
+	// 生产环境 chat 条目不返回 chat_id，会话 id 来自 resource_id
+	it("writes the resolved chat id even when the item has no chat_id", () => {
+		const item = makeItem({ id: 762, resource_id: 762, resource_type: "chat", chat_id: null });
+		expect(chatFrontmatter(item, "标题", SYNCED_AT, 762).chat_id).toBe(762);
 	});
 });
 

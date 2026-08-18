@@ -102,7 +102,35 @@ describe("PuzleClient response unwrapping", () => {
 		expect(http.requests[0].url).toBe(`${BASE_URL}/api/v1/users/profile`);
 	});
 
-	it("throws ApiError with msg and code when code !== 0", async () => {
+	// 生产环境 (read-web.puzle.com.cn) 的成功码是 200，测试环境/文档写的是 0，两者都要认
+	it.each([0, 200])("treats envelope code %d as success", async (code) => {
+		const http = new MockHttp().enqueueEnvelope({ id: 2, username: "卢书洋" }, code, "success");
+		const client = new PuzleClient(BASE_URL, TOKEN, http);
+
+		await expect(client.getProfile()).resolves.toMatchObject({ id: 2, username: "卢书洋" });
+	});
+
+	it("unwraps a real production envelope shape", async () => {
+		// 生产真实响应：{code:200, msg:'success', data:{...}, timestamp}
+		const body = {
+			code: 200,
+			msg: "success",
+			data: { total: 190, items: [{ id: 2860 }], page: 1, pageSize: 50 },
+			timestamp: 1787035468
+		};
+		const http = new MockHttp().enqueue(() => ({
+			status: 200,
+			text: JSON.stringify(body),
+			json: body
+		}));
+		const client = new PuzleClient(BASE_URL, TOKEN, http);
+
+		const page = await client.listReadingItems({ page: 1, page_size: 50 });
+		expect(page.total).toBe(190);
+		expect(page.items).toHaveLength(1);
+	});
+
+	it("throws ApiError with msg and code when code is not a success code", async () => {
 		const http = new MockHttp().enqueueEnvelope(null, 404001, "user not found");
 		const client = new PuzleClient(BASE_URL, TOKEN, http);
 

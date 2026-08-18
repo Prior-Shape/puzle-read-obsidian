@@ -6,13 +6,14 @@ import { roleLabel } from "./article";
 export const THINKING_CALLOUT_TITLE = "> [!note]- 🧠 思考过程";
 
 export function chatFrontmatter(
-	item: Pick<ReadingItem, "chat_id" | "puzle_id" | "created_time">,
+	item: Pick<ReadingItem, "puzle_id" | "created_time">,
 	title: string,
-	syncedAt: string
+	syncedAt: string,
+	chatId: number
 ): Record<string, unknown> {
 	return {
 		puzle_type: "chat",
-		chat_id: item.chat_id ?? null,
+		chat_id: chatId,
 		puzle_id: item.puzle_id,
 		title,
 		created: item.created_time ?? null,

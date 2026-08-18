@@ -21,3 +21,6 @@ dist/
 # Orca DAG 规划执行脚本与任务 spec（暂不入库）
 /scripts/*
 !/scripts/build-template.mjs
+
+# E2E 运行产物（沙箱 vault、截图、token 等均在 /tmp，不入库）
+e2e/artifacts/

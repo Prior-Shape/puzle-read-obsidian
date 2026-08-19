@@ -109,8 +109,10 @@ describe("ChatSyncer decisions", () => {
 		expect(gateway.writes).toEqual([]);
 	});
 
-	it("skips the continuation chat used by AI 续写", async () => {
-		store.setContinuationChatId(214);
+	// 续写功能已下线，老账号里那个专用会话仍不该被同步成对话笔记
+	it("skips the legacy continuation chat", async () => {
+		const data = mergePluginData({ syncState: { continuationChatId: 214 } });
+		store = new SyncStore({ getData: () => data, saveData: async () => undefined });
 		client.pages = [[makeChatItem()]];
 
 		const report = await new ChatSyncer(() => socket.asSocket()).sync(
@@ -120,6 +122,21 @@ describe("ChatSyncer decisions", () => {
 		expect(report).toMatchObject({ skipped: 1, created: 0, failed: 0 });
 		expect(socket.historyCalls).toEqual([]);
 		expect(socket.fullHistoryCalls).toEqual([]);
+		expect(gateway.writes).toEqual([]);
+	});
+
+	it("skips a chat that is streaming in the panel right now", async () => {
+		socket.firstPages.set(214, makeHistoryResponse({ total: 2, turns: TWO_TURNS.slice(0, 1) }));
+		socket.fullHistories.set(214, makeHistoryResponse({ total: 2, turns: TWO_TURNS }));
+		client.pages = [[makeChatItem()]];
+
+		const report = await new ChatSyncer(() => socket.asSocket(), {
+			isBusy: (chatId) => chatId === 214
+		}).sync(makeCtx({ client, socket, gateway, store, notices, mode: "full" }));
+
+		// 面板刚写回的最后一轮服务端可能还没落库，这时同步会用旧历史盖掉它
+		expect(report).toMatchObject({ skipped: 1, created: 0, updated: 0, failed: 0 });
+		expect(socket.historyCalls).toEqual([]);
 		expect(gateway.writes).toEqual([]);
 	});
 
@@ -187,7 +204,7 @@ describe("ChatSyncer decisions", () => {
 			created: "2026-03-18T14:46:40Z",
 			synced: "2026-08-10T15:00:00Z"
 		});
-		expect(write.managed).toContain("## 对话");
+		expect(write.managed.startsWith("## 🙋 我")).toBe(true);
 		expect(write.managed).toContain("> 阅读的四个层次是什么？");
 		expect(write.managed).toContain("四个层次：基础、检视、分析、主题。");
 		expect(write.managed).not.toContain("[!note]");

@@ -26,12 +26,9 @@ export class SyncStore {
 		this.state.lastSyncAt = value;
 	}
 
+	/** 历史遗留的 AI 续写专用会话；功能已下线，只剩「把它挡在同步与会话列表之外」这一个用途 */
 	get continuationChatId(): number | null {
 		return this.state.continuationChatId;
-	}
-
-	setContinuationChatId(value: number | null): void {
-		this.state.continuationChatId = value;
 	}
 
 	getArticle(id: number): SyncArticleState | undefined {

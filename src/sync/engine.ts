@@ -72,6 +72,11 @@ export function storedRelativePath(
 	return fallback;
 }
 
+/** 同步/写回统一使用的时间戳口径：秒级 UTC，写进 frontmatter 的 `synced` */
+export function syncTimestamp(): string {
+	return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -107,7 +112,7 @@ export class SyncEngine {
 		this.syncing = true;
 		const reports: SyncReport[] = [];
 		const gateway = this.options.getGateway();
-		const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+		const now = syncTimestamp();
 		const ctx: SyncContext = {
 			mode,
 			client: this.options.getClient(),

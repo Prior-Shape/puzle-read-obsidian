@@ -23,46 +23,40 @@ exports[`chatFrontmatter > matches the TECH_SPEC 3.4 field set 1`] = `
 `;
 
 exports[`renderChatManaged > omits thinking/tool logs when keepThinking is off 1`] = `
-"## 对话
-
-**🙋 我**
+"## 🙋 我
 
 > 阅读的四个层次是什么？
 
-**🤖 Puzle**
+## 🤖 Puzle
 
 阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。
 
-**🙋 我**
+## 🙋 我
 
 > 第二层
 > 展开讲讲？
 
-**🤖 Puzle**
+## 🤖 Puzle
 
 检视阅读是在有限时间内抓住全书骨架的阅读方式。"
 `;
 
 exports[`renderChatManaged > renders mapped history turns end to end 1`] = `
-"## 对话
-
-**🙋 我**
+"## 🙋 我
 
 > 你好
 
-**🤖 Puzle**
+## 🤖 Puzle
 
 你好！"
 `;
 
 exports[`renderChatManaged > renders thinking/tool logs as a collapsed callout when keepThinking is on 1`] = `
-"## 对话
-
-**🙋 我**
+"## 🙋 我
 
 > 阅读的四个层次是什么？
 
-**🤖 Puzle**
+## 🤖 Puzle
 
 阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。
 
@@ -76,12 +70,12 @@ exports[`renderChatManaged > renders thinking/tool logs as a collapsed callout w
 > 知识库
 > 《如何阅读一本书》有相关章节
 
-**🙋 我**
+## 🙋 我
 
 > 第二层
 > 展开讲讲？
 
-**🤖 Puzle**
+## 🤖 Puzle
 
 检视阅读是在有限时间内抓住全书骨架的阅读方式。"
 `;

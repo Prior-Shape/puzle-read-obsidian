@@ -41,14 +41,19 @@ describe("SyncStore", () => {
 		expect(store.getChat(214)).toBeUndefined();
 	});
 
-	it("tracks lastSyncAt and continuationChatId", () => {
+	it("tracks lastSyncAt", () => {
 		const { store } = makeStore();
 		expect(store.lastSyncAt).toBeNull();
-		expect(store.continuationChatId).toBeNull();
 		store.setLastSyncAt("2026-08-10T00:00:00Z");
-		store.setContinuationChatId(77);
 		expect(store.lastSyncAt).toBe("2026-08-10T00:00:00Z");
+	});
+
+	// 续写功能已下线，但老 data.json 里可能还留着那个会话 id，读得到才挡得住
+	it("reads the legacy continuationChatId from saved data", () => {
+		const data = mergePluginData({ syncState: { continuationChatId: 77 } });
+		const store = new SyncStore({ getData: () => data, saveData: async () => undefined });
 		expect(store.continuationChatId).toBe(77);
+		expect(makeStore().store.continuationChatId).toBeNull();
 	});
 
 	it("flush persists through the backend saveData", async () => {

@@ -194,3 +194,28 @@ export class TFile extends TAbstractFile {
 export class TFolder extends TAbstractFile {
 	children: TAbstractFile[] = [];
 }
+
+export class PopoverSuggest<T> {
+	app: unknown;
+
+	constructor(app: unknown) {
+		this.app = app;
+	}
+
+	close(): void {}
+}
+
+export class AbstractInputSuggest<T> extends PopoverSuggest<T> {
+	constructor(app: unknown, inputEl: unknown) {
+		super(app);
+		void inputEl;
+	}
+
+	setValue(value: string): void {
+		void value;
+	}
+}
+
+export class MarkdownView extends ItemView {
+	file: TFile | null = null;
+}

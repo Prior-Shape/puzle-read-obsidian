@@ -6,7 +6,7 @@
 
 - `Articles/` — 文章笔记，每篇已读文章一个文件，frontmatter 含 `reading_id` 等元数据。
 - `Highlights/` — 高亮笔记，每条高亮一个文件，`article` 属性链接到所属文章。
-- `Chats/` — 与 Puzle AI 的对话记录。
+- `Chats/` — 与 Puzle AI 的对话记录；右边栏聊天面板每说完一轮就会就地更新对应文件。
 
 ## Base 视图入口
 

@@ -1,5 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { NativeSocketFactory, NoticeLogger, ObsidianHttpPort } from "./adapters/obsidian";
+import { registerAnnotationsFeature } from "./annotations/feature";
 import { registerChatFeature } from "./chat/feature";
 import { PuzleClient } from "./core/api/client";
 import type { Logger } from "./core/ports";
@@ -8,7 +9,8 @@ import type { PluginDeps } from "./deps";
 import { PuzleSettingTab, mergePluginData } from "./settings";
 import type { PluginData } from "./settings";
 import { registerSyncFeature } from "./sync/feature";
-import { registerWriterFeature } from "./writer/feature";
+import { PuzleContextMenu } from "./ui/context-menu";
+import { registerReadingMode } from "./vault/reading-mode";
 
 export function deriveWsUrl(baseUrl: string): string {
 	const trimmed = baseUrl.trim().replace(/\/+$/, "");
@@ -42,9 +44,19 @@ export default class PuzleReadPlugin extends Plugin {
 			getSocket: () => this.getSocket(),
 			saveData: () => this.saveSettings()
 		};
-		registerSyncFeature(this, deps);
-		registerChatFeature(this, deps);
-		registerWriterFeature(this, deps);
+		const contextMenu = new PuzleContextMenu();
+		const sync = registerSyncFeature(this, deps);
+		const chat = registerChatFeature(this, deps, { chatNotes: sync.chatNotes, contextMenu });
+		registerAnnotationsFeature(this, deps, {
+			askAboutSelection: (article, snippet) => {
+				void chat.openArticleChatByPath(article.path, snippet);
+			},
+			contextMenu,
+			articleRefresher: sync.articleRefresher
+		});
+		registerReadingMode(this, deps);
+		// 各 feature 注册完菜单项后再挂事件，编辑模式走 editor-menu、阅读模式走预览区的 contextmenu
+		contextMenu.attach(this);
 
 		this.app.workspace.onLayoutReady(() => {
 			if (!this.data.settings.token) {

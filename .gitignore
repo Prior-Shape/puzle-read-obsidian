@@ -24,3 +24,12 @@ dist/
 
 # E2E 运行产物（沙箱 vault、截图、token 等均在 /tmp，不入库）
 e2e/artifacts/
+
+# 插件运行时数据（含明文 Token）——软链调试时 Obsidian 会写在仓库根目录
+data.json
+
+# 正文 HTML 缓存（插件目录下；软链调试时同样落在仓库根目录）
+cache/
+
+# Hot Reload 插件标记（本地调试用）
+.hotreload

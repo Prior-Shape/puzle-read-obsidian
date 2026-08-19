@@ -28,7 +28,7 @@
 
 ```
 node e2e/mock-server.mjs &     # 本地 REST + WebSocket，按协议还原
-node e2e/run.mjs               # 12 个用例；可传子串过滤，如 node e2e/run.mjs 续写
+node e2e/run.mjs               # 10 个用例；可传子串过滤，如 node e2e/run.mjs 聊天
 ```
 
 mock 后端的 `/__control` 可注入异常场景（断线、空页、慢速流），
@@ -38,7 +38,7 @@ mock 后端的 `/__control` 可注入异常场景（断线、空页、慢速流�
 
 `e2e/run-live.mjs` 跑真实后端，覆盖 mock 测不到的契约与端到端行为：
 只读（REST 分页 / WS 鉴权与历史 / 会话列表 / 历史渲染）+ 写入
-（发消息流式、多轮追问、中途停止、AI 续写、编辑中止）+ 同步 + 设置鉴权。
+（发消息流式、多轮追问、中途停止）+ 同步 + 设置鉴权。
 
 ```
 # 先把沙箱 vault 的 data.json 换成真实 baseUrl / token

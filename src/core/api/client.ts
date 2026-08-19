@@ -2,6 +2,7 @@ import type {
 	CommentItem,
 	FileReadingDetail,
 	HighlightItem,
+	HighlightLocationData,
 	LinkReadingDetail,
 	PageResponse,
 	ReadingItem,
@@ -38,6 +39,20 @@ interface ApiEnvelope<T> {
 
 export type QueryValue = string | number | boolean | Array<string | number> | null | undefined;
 export type QueryParams = Record<string, QueryValue>;
+
+export interface CreateHighlightInput {
+	reading_id: number;
+	content: string;
+	location_data: HighlightLocationData;
+	highlight_type?: "text" | "position" | "comment";
+	color?: string;
+}
+
+export interface CreateCommentInput {
+	reading_id: number;
+	content: string;
+	highlight_id?: number | null;
+}
 
 export interface ListReadingItemsParams {
 	page?: number;
@@ -137,6 +152,36 @@ export class PuzleClient {
 				}),
 			pageSize
 		);
+	}
+
+	createHighlight(input: CreateHighlightInput): Promise<HighlightItem> {
+		return this.request<HighlightItem>("POST", "/api/v1/reading/highlights", {
+			body: {
+				reading_id: input.reading_id,
+				highlight_type: input.highlight_type ?? "text",
+				content: input.content,
+				color: input.color,
+				location_data: input.location_data
+			}
+		});
+	}
+
+	deleteHighlight(highlightId: number): Promise<unknown> {
+		return this.request<unknown>("DELETE", `/api/v1/reading/highlights/${highlightId}`);
+	}
+
+	createComment(input: CreateCommentInput): Promise<CommentItem> {
+		return this.request<CommentItem>("POST", "/api/v1/reading/comments", {
+			body: {
+				reading_id: input.reading_id,
+				highlight_id: input.highlight_id ?? undefined,
+				content: input.content
+			}
+		});
+	}
+
+	deleteComment(commentId: number): Promise<unknown> {
+		return this.request<unknown>("DELETE", `/api/v1/reading/comments/${commentId}`);
 	}
 
 	getProfile(): Promise<UserProfile> {

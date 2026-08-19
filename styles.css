@@ -274,3 +274,287 @@
 .puzle-chat-stop:hover {
 	opacity: 0.9;
 }
+
+/* ---------- 打开对话笔记 ---------- */
+
+.puzle-chat-note-button {
+	flex: none;
+	width: var(--input-height, 30px);
+	height: var(--input-height, 30px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 4px);
+	background-color: var(--interactive-normal);
+	color: var(--text-normal);
+	line-height: 1;
+	cursor: pointer;
+}
+
+.puzle-chat-note-button:hover {
+	background-color: var(--interactive-hover);
+}
+
+/* ---------- 文章绑定提示 ---------- */
+
+.puzle-chat-article-chip {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	padding: var(--size-4-1) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.puzle-chat-article-chip a {
+	color: var(--text-accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---------- 批注面板 ---------- */
+
+.puzle-annotations-root {
+	padding: 0;
+}
+
+.puzle-annotations {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-6);
+	height: 100%;
+	padding: var(--size-4-3) var(--size-4-3) var(--size-4-8);
+	overflow-y: auto;
+	font-size: var(--font-ui-small);
+	line-height: 1.55;
+}
+
+.puzle-annotations-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	padding-bottom: var(--size-4-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.puzle-annotations-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--font-semibold);
+}
+
+.puzle-annotations-refresh {
+	flex: none;
+	cursor: pointer;
+}
+
+.puzle-annotations-status,
+.puzle-annotations-empty {
+	padding: var(--size-4-3) var(--size-4-2);
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.puzle-annotations-error {
+	padding: var(--size-4-2);
+	color: var(--text-error);
+}
+
+.puzle-annotations-section-label {
+	margin-bottom: var(--size-4-3);
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+/* 卡片不再画框：左侧一道细线做归属，条目之间靠留白分隔，密集列表才不显拥挤 */
+.puzle-annotation-card {
+	margin-bottom: var(--size-4-5);
+	padding: var(--size-2-1) 0 var(--size-2-1) var(--size-4-3);
+	border-left: 2px solid var(--text-accent);
+	border-radius: 0 var(--radius-s) var(--radius-s) 0;
+	transition: background-color 120ms ease;
+}
+
+.puzle-annotation-card:last-child {
+	margin-bottom: 0;
+}
+
+.puzle-annotation-card:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.puzle-annotation-card.is-ai {
+	border-left-color: var(--background-modifier-border);
+}
+
+.puzle-annotation-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	margin-bottom: var(--size-2-2);
+}
+
+.puzle-annotation-category {
+	padding: 0 var(--size-2-2);
+	border-radius: var(--radius-s);
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.puzle-annotation-role {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.puzle-annotation-quote {
+	margin: 0;
+	padding: 0;
+	border: none;
+	color: var(--text-normal);
+	line-height: 1.65;
+	cursor: pointer;
+}
+
+.puzle-annotation-quote:hover {
+	color: var(--text-accent);
+}
+
+/* 想法给一块底色，跟上面的高亮原文拉开层次 */
+.puzle-annotation-comment {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-1);
+	margin-top: var(--size-4-2);
+	padding: var(--size-4-1) var(--size-4-2);
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary-alt);
+	color: var(--text-muted);
+}
+
+.puzle-annotation-comment-role {
+	flex: none;
+}
+
+.puzle-annotation-comment-text {
+	flex: 1;
+	min-width: 0;
+	white-space: pre-wrap;
+}
+
+.puzle-annotation-comment-delete {
+	flex: none;
+	opacity: 0;
+}
+
+.puzle-annotation-comment:hover .puzle-annotation-comment-delete,
+.puzle-annotation-comment:focus-within .puzle-annotation-comment-delete {
+	opacity: 1;
+}
+
+/* 每条高亮都挂着同样几个动作，常态压暗，指到哪条才亮哪条 */
+.puzle-annotation-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-3);
+	margin-top: var(--size-4-2);
+	opacity: 0.45;
+	transition: opacity 120ms ease;
+}
+
+.puzle-annotation-card:hover .puzle-annotation-actions,
+.puzle-annotation-card:focus-within .puzle-annotation-actions {
+	opacity: 1;
+}
+
+.puzle-annotation-actions-gap {
+	flex: 1;
+}
+
+.puzle-annotation-confirm {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.puzle-annotation-action {
+	height: auto;
+	padding: 0;
+	border: none;
+	background: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.puzle-annotation-action:hover {
+	background: none;
+	box-shadow: none;
+	color: var(--text-accent);
+}
+
+.puzle-annotation-action.is-danger:hover {
+	color: var(--text-error);
+}
+
+.puzle-annotation-action:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.puzle-annotation-composer {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-1);
+	margin-top: var(--size-4-3);
+}
+
+.puzle-annotation-input {
+	width: 100%;
+	resize: vertical;
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+.puzle-annotation-submit {
+	align-self: flex-end;
+	padding: var(--size-2-1) var(--size-4-3);
+	font-size: var(--font-ui-smaller);
+}
+
+/* ---------- 聊天里的引用原文 ---------- */
+
+.puzle-chat-quote {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-1);
+	margin: var(--size-4-1) var(--size-4-3) 0;
+	padding: var(--size-4-1) var(--size-4-2);
+	border-left: 3px solid var(--text-accent);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.puzle-chat-quote-text {
+	flex: 1;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.puzle-chat-quote-clear {
+	flex: none;
+	cursor: pointer;
+}

@@ -3,16 +3,45 @@ import type { Plugin } from "obsidian";
 import type { PluginDeps } from "../deps";
 import { VaultGateway } from "../vault/gateway";
 import { scaffoldWorkspace } from "../vault/scaffold";
+import { ArticleRefresher } from "./article-refresh";
 import { ArticleSyncer } from "./article-syncer";
+import { ChatNotes } from "./chat-notes";
 import { ChatSyncer } from "./chat-syncer";
 import { SyncEngine, errorMessage } from "./engine";
 import { HighlightSyncer } from "./highlight-syncer";
 import { SyncStore } from "./store";
 
-export function registerSyncFeature(plugin: Plugin, deps: PluginDeps): void {
+export interface SyncFeature {
+	/** 聊天面板的写回通道：说完一轮就把会话重渲染进 `Chats/*.md` */
+	chatNotes: ChatNotes;
+	/** 划词写回后刷新这一篇文章笔记，正文锚点不必等下次同步 */
+	articleRefresher: ArticleRefresher;
+}
+
+export function registerSyncFeature(plugin: Plugin, deps: PluginDeps): SyncFeature {
 	const store = new SyncStore({ getData: deps.getData, saveData: deps.saveData });
 	const makeGateway = (): VaultGateway =>
 		new VaultGateway(plugin.app, deps.getSettings().rootFolder);
+	const chatNotes = new ChatNotes({
+		getGateway: makeGateway,
+		getSettings: deps.getSettings,
+		store,
+		notice: (message) => {
+			new Notice(message);
+		},
+		logger: deps.logger
+	});
+
+	const articleRefresher = new ArticleRefresher({
+		getClient: deps.getClient,
+		getGateway: makeGateway,
+		getSettings: deps.getSettings,
+		store,
+		notice: (message) => {
+			new Notice(message);
+		},
+		logger: deps.logger
+	});
 
 	const engine = new SyncEngine({
 		getClient: deps.getClient,
@@ -26,7 +55,9 @@ export function registerSyncFeature(plugin: Plugin, deps: PluginDeps): void {
 	});
 	engine.register(new ArticleSyncer());
 	engine.register(new HighlightSyncer());
-	engine.register(new ChatSyncer(() => deps.getSocket()));
+	engine.register(
+		new ChatSyncer(() => deps.getSocket(), { isBusy: (chatId) => chatNotes.isBusy(chatId) })
+	);
 
 	const watcherGateway = makeGateway();
 	plugin.registerEvent(
@@ -77,4 +108,6 @@ export function registerSyncFeature(plugin: Plugin, deps: PluginDeps): void {
 			void engine.runSync("incremental");
 		}, 60 * 1000)
 	);
+
+	return { chatNotes, articleRefresher };
 }

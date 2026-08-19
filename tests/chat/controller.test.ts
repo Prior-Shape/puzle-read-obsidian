@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ChatController } from "../../src/chat/controller";
-import type { ChatControllerState } from "../../src/chat/controller";
+import type { ChatControllerOptions, ChatControllerState } from "../../src/chat/controller";
 import { PuzleClient } from "../../src/core/api/client";
 import type { ReadingItem, ResourceType } from "../../src/core/models";
 import type { HttpMethod, HttpPort, HttpRequestOptions, HttpResponse, SocketFactory, WebSocketLike } from "../../src/core/ports";
@@ -111,12 +111,12 @@ interface Harness {
 	latest(): ChatControllerState;
 }
 
-async function createHarness(): Promise<Harness> {
+async function createHarness(options: ChatControllerOptions = {}): Promise<Harness> {
 	const factory = new FakeSocketFactory();
 	const socket = new PuzleSocket(WS_URL, () => TOKEN, factory);
 	const http = new FakeHttpPort();
 	const client = new PuzleClient(BASE_URL, TOKEN, http);
-	const controller = new ChatController(socket, client);
+	const controller = new ChatController(socket, client, options);
 	const connectPromise = socket.connect();
 	factory.last.open();
 	await connectPromise;
@@ -143,13 +143,8 @@ describe("ChatController sessions", () => {
 		await harness.controller.loadSessions();
 
 		expect(harness.latest().sessions).toEqual([
-			{
-				chatId: 214,
-				title: "关于阅读层次的讨论",
-				status: "done",
-				createdTime: "2026-03-18T14:46:40Z"
-			},
-			{ chatId: 9, title: "对话 9", status: null, createdTime: "2026-03-18T14:46:40Z" }
+			{ chatId: 214, title: "关于阅读层次的讨论" },
+			{ chatId: 9, title: "对话 9" }
 		]);
 	});
 
@@ -245,9 +240,7 @@ describe("ChatController streaming", () => {
 
 		await flush();
 		expect(harness.http.requests.some((entry) => entry.url.includes("/api/v1/reading/items"))).toBe(true);
-		expect(harness.latest().sessions).toEqual([
-			{ chatId: 42, title: "新对话", status: null, createdTime: "2026-03-18T14:46:40Z" }
-		]);
+		expect(harness.latest().sessions).toEqual([{ chatId: 42, title: "新对话" }]);
 	});
 
 	it("accumulates streaming deltas and returns to idle on turn_end", async () => {
@@ -314,6 +307,8 @@ describe("ChatController streaming", () => {
 			turnId: "turn_1"
 		});
 		expect(active.messages[1].id).not.toMatch(/^streaming-/);
+		// 本地发出的用户消息在回合结束时补上 turn_id，写回 Markdown 才数得准回合
+		expect(active.messages[0]).toMatchObject({ role: "user", turnId: "turn_1", id: "user-turn_1" });
 	});
 
 	it("ignores chat events for other chat ids and title_generated updates the title", async () => {
@@ -374,12 +369,12 @@ describe("ChatController streaming", () => {
 		expect(active.error).toBe("服务繁忙");
 	});
 
-	it("ignores acks and mid-stream events belonging to another consumer (AI 续写)", async () => {
+	it("ignores acks and mid-stream events belonging to another consumer on the shared socket", async () => {
 		const harness = await createHarness();
 		harness.controller.send("你好");
 		const requestId = harness.ws.lastSentJson().client_request_id as string;
 
-		// 续写器的 ack：client_request_id 不匹配，不应认领
+		// 另一个消费者的 ack：client_request_id 不匹配，不应认领
 		harness.ws.receive(
 			frame(
 				"system",
@@ -389,11 +384,11 @@ describe("ChatController streaming", () => {
 		);
 		expect(harness.latest().active.chatId).toBeNull();
 
-		// 续写器已在流式中的 message 事件（无 turn_start）也不应被认领
+		// 别人已在流式中的 message 事件（无 turn_start）也不应被认领
 		harness.ws.receive(
 			frame(
 				"chat",
-				{ type: "message", chat_id: 900, turn_id: "turn_w", detail: { type: "text", marker: "delta", delta: "续写内容" } },
+				{ type: "message", chat_id: 900, turn_id: "turn_w", detail: { type: "text", marker: "delta", delta: "别人的内容" } },
 				"evt_w1"
 			)
 		);
@@ -457,5 +452,116 @@ describe("ChatController streaming", () => {
 		harness.controller.send("再来一条");
 		expect(harness.ws.sentJson().filter((entry) => entry.type === "chat_completion")).toHaveLength(1);
 		expect(harness.latest().active.messages).toHaveLength(1);
+	});
+});
+
+describe("ChatController 文章绑定与会话列表", () => {
+	it("把历史遗留的续写专用会话排除在列表之外", async () => {
+		const harness = await createHarness({ getExcludedChatId: () => 9 });
+		harness.http.items = [
+			readingItem({ id: 2, resource_type: "chat", chat_id: 214, title: "正常会话" }),
+			readingItem({ id: 3, resource_type: "chat", chat_id: 9, title: "续写专用" })
+		];
+
+		await harness.controller.loadSessions();
+
+		expect(harness.latest().sessions.map((entry) => entry.chatId)).toEqual([214]);
+	});
+
+	it("列表只收 chat 条目，link/file 条目一概不进来", async () => {
+		const harness = await createHarness();
+		harness.http.items = [
+			readingItem({ id: 7, resource_type: "link", chat_id: 214, title: "如何阅读一本书" }),
+			readingItem({ id: 2, resource_type: "chat", chat_id: 214, title: "关于阅读层次的讨论" }),
+			readingItem({ id: 3, resource_type: "chat", chat_id: 9, title: "通用对话" })
+		];
+
+		await harness.controller.loadSessions();
+
+		expect(harness.latest().sessions).toEqual([
+			{ chatId: 214, title: "关于阅读层次的讨论" },
+			{ chatId: 9, title: "通用对话" }
+		]);
+	});
+
+	it("边翻页边发状态，不必等全部拉完才有列表", async () => {
+		const harness = await createHarness();
+		harness.http.items = Array.from({ length: 60 }, (_, index) =>
+			readingItem({ id: index + 1, resource_type: "chat", chat_id: index + 1, title: `会话 ${index + 1}` })
+		);
+
+		await harness.controller.loadSessions();
+
+		const sessionCounts = harness.states.map((state) => state.sessions.length);
+		const partial = sessionCounts.filter((count) => count > 0 && count < 60);
+		expect(partial.length).toBeGreaterThan(0);
+		expect(harness.latest().sessions).toHaveLength(60);
+		expect(harness.latest().sessionsLoading).toBe(false);
+	});
+
+	it("第二次 loadSessions 走缓存，force 才重新拉", async () => {
+		const harness = await createHarness();
+		harness.http.items = [readingItem({ id: 2, resource_type: "chat", chat_id: 214, title: "会话" })];
+
+		await harness.controller.loadSessions();
+		const afterFirst = harness.http.requests.length;
+		await harness.controller.loadSessions();
+		expect(harness.http.requests.length).toBe(afterFirst);
+
+		await harness.controller.loadSessions(true);
+		expect(harness.http.requests.length).toBeGreaterThan(afterFirst);
+	});
+
+	it("发消息时带上文章上下文；带选中文本时附 selected_text", async () => {
+		const harness = await createHarness();
+		await harness.controller.openArticleChat({ readingId: 7, title: "如何阅读一本书" }, null);
+
+		harness.controller.send("这段讲的是什么？", "  基础阅读  ");
+
+		expect(harness.ws.lastSentJson()).toMatchObject({
+			type: "chat_completion",
+			chat_id: null,
+			content: "这段讲的是什么？",
+			context: { type: "reading", params: { reading_id: 7, selected_text: "基础阅读" } }
+		});
+	});
+
+	it("通用对话不带 context", async () => {
+		const harness = await createHarness();
+		harness.controller.newSession();
+		harness.controller.send("你好");
+		expect(harness.ws.lastSentJson().context).toBeUndefined();
+	});
+
+	it("新建的文章会话拿到 ack 后回调绑定，供上层落盘", async () => {
+		const bound: Array<[number, number]> = [];
+		const harness = await createHarness({
+			onArticleChatBound: (readingId, chatId) => bound.push([readingId, chatId])
+		});
+		await harness.controller.openArticleChat({ readingId: 7, title: "如何阅读一本书" }, null);
+		harness.controller.send("开聊");
+
+		const requestId = harness.ws.lastSentJson().client_request_id;
+		harness.ws.receive(
+			frame("system", {
+				type: "chat_completion_ack",
+				chat_id: 520,
+				request: { client_request_id: requestId }
+			})
+		);
+		await flush();
+
+		expect(bound).toEqual([[7, 520]]);
+		expect(harness.latest().active.chatId).toBe(520);
+		expect(harness.latest().active.article).toMatchObject({ readingId: 7 });
+	});
+
+	it("已有 chat_id 的文章直接续聊，不新建会话", async () => {
+		const harness = await createHarness();
+		void harness.controller.openArticleChat({ readingId: 7, title: "如何阅读一本书" }, 214);
+		await flush();
+
+		expect(harness.latest().active.chatId).toBe(214);
+		expect(harness.ws.lastSentJson()).toMatchObject({ type: "chat_history", chat_id: 214 });
 	});
 });

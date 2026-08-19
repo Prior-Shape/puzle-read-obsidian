@@ -5,8 +5,11 @@ export interface SessionPickerProps {
 	activeChatId: number | null;
 	activeTitle: string | null;
 	disabled?: boolean;
+	loading?: boolean;
 	onOpenSession(chatId: number): void;
 	onNewSession(): void;
+	/** 打开该会话的 `Chats/*.md` 留档；不传则不渲染该按钮 */
+	onOpenNote?(chatId: number): void;
 }
 
 export function SessionPicker({
@@ -14,8 +17,10 @@ export function SessionPicker({
 	activeChatId,
 	activeTitle,
 	disabled,
+	loading,
 	onOpenSession,
-	onNewSession
+	onNewSession,
+	onOpenNote
 }: SessionPickerProps) {
 	const hasActive = activeChatId !== null && sessions.some((entry) => entry.chatId === activeChatId);
 	return (
@@ -43,6 +48,11 @@ export function SessionPicker({
 						{entry.title}
 					</option>
 				))}
+				{loading && (
+					<option value="" disabled>
+						正在加载会话…
+					</option>
+				)}
 			</select>
 			<button
 				type="button"
@@ -54,6 +64,17 @@ export function SessionPicker({
 			>
 				+
 			</button>
+			{onOpenNote && activeChatId !== null && (
+				<button
+					type="button"
+					className="puzle-chat-note-button clickable"
+					title="打开对话笔记"
+					aria-label="打开对话笔记"
+					onClick={() => onOpenNote(activeChatId)}
+				>
+					📄
+				</button>
+			)}
 		</div>
 	);
 }

@@ -518,10 +518,7 @@ class WsConnection {
 			typeof msg.content === "string"
 				? msg.content
 				: (msg.content ?? []).map((p) => p.text ?? "").join("");
-		const isContinuation = contentText.startsWith("请直接续写以下文字");
-		const reply = isContinuation
-			? "，而主题阅读则要求同时驾驭多本书。"
-			: `收到：${contentText.slice(0, 20)}。这是 mock 后端的流式回复。`;
+		const reply = `收到：${contentText.slice(0, 20)}。这是 mock 后端的流式回复。`;
 
 		const chunks = splitForStream(reply);
 		const stream = { chatId, turnId, cancelled: false, timers: [] };

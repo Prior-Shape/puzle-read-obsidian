@@ -6,18 +6,26 @@ import { mapChatHistoryResponse } from "../core/ws/history";
 import type { PuzleSocket, Unsubscribe } from "../core/ws/manager";
 import type { TurnStreamState } from "../core/ws/stream";
 import { TurnStreamReducer } from "../core/ws/stream";
-import type { ChatStreamEvent, WsEvent } from "../core/ws/types";
+import type { ChatContextModel, ChatStreamEvent, WsEvent } from "../core/ws/types";
 
 export interface ChatSessionInfo {
 	chatId: number;
 	title: string;
-	status?: string | null;
-	createdTime?: string | null;
+}
+
+export interface ArticleBinding {
+	readingId: number;
+	title: string;
+	/** 文章笔记在 Vault 中的路径，用于回写 frontmatter 的 chat_id */
+	path?: string | null;
 }
 
 export interface ActiveChatState {
 	chatId: number | null;
 	title: string | null;
+	article: ArticleBinding | null;
+	/** 「就这段提问」暂存的引用原文，随下一条消息作为 selected_text 发出 */
+	pendingSelection: string | null;
 	messages: ChatMessage[];
 	streaming: boolean;
 	loading: boolean;
@@ -26,21 +34,33 @@ export interface ActiveChatState {
 
 export interface ChatControllerState {
 	sessions: ChatSessionInfo[];
+	sessionsLoading: boolean;
 	active: ActiveChatState;
 }
 
 export interface ChatControllerOptions {
 	logger?: Logger;
+	/** 历史遗留的续写专用会话不应出现在会话列表里 */
+	getExcludedChatId?: () => number | null;
+	/** 新会话首次拿到 chat_id 时回调，用于把绑定持久化到文章 */
+	onArticleChatBound?: (readingId: number, chatId: number) => void;
 }
 
 export type ChatStateListener = (state: ChatControllerState) => void;
 
 const STREAMING_ID_PREFIX = "streaming-";
+/** 会话列表边翻页边渲染的批次大小：账号条目多时不用等全部拉完才看到东西 */
+export const SESSION_EMIT_BATCH = 10;
 
-function createEmptyActive(): ActiveChatState {
+function createEmptyActive(
+	article: ArticleBinding | null = null,
+	pendingSelection: string | null = null
+): ActiveChatState {
 	return {
 		chatId: null,
 		title: null,
+		article,
+		pendingSelection,
 		messages: [],
 		streaming: false,
 		loading: false,
@@ -49,7 +69,7 @@ function createEmptyActive(): ActiveChatState {
 }
 
 function createInitialState(): ChatControllerState {
-	return { sessions: [], active: createEmptyActive() };
+	return { sessions: [], sessionsLoading: false, active: createEmptyActive() };
 }
 
 function isStreamingMessage(message: ChatMessage | undefined): boolean {
@@ -70,6 +90,7 @@ export class ChatController {
 	private state: ChatControllerState = createInitialState();
 	private generation = 0;
 	private sessionLoadGeneration = 0;
+	private sessionsLoadedOnce = false;
 	private streamChatId: number | null = null;
 	private requestId = "";
 	private disposed = false;
@@ -105,32 +126,45 @@ export class ChatController {
 		};
 	}
 
-	async loadSessions(): Promise<void> {
+	/**
+	 * 拉会话列表。条目多时 `/reading/items` 要翻很多页，所以边翻边发状态，
+	 * 而不是等全部拉完 —— 否则面板长时间空白，看起来像「没有会话列表」。
+	 * 已经拉过一次的，非 force 调用直接复用缓存。
+	 */
+	async loadSessions(force = false): Promise<void> {
 		if (this.disposed) return;
+		if (this.sessionsLoadedOnce && !force) return;
 		const generation = ++this.sessionLoadGeneration;
+		const stale = () => this.disposed || generation !== this.sessionLoadGeneration;
+		this.setState({ sessionsLoading: true });
 		try {
+			const excluded = this.options.getExcludedChatId?.() ?? null;
 			const sessions: ChatSessionInfo[] = [];
+			let sinceEmit = 0;
+
 			for await (const item of this.client.iterateAllReadingItems()) {
-				if (this.disposed || generation !== this.sessionLoadGeneration) return;
+				if (stale()) return;
 				if (!isChatReadingItem(item)) continue;
 				const chatId = resolveChatId(item);
-				if (chatId === null) continue;
-				sessions.push({
-					chatId,
-					title: item.title?.trim() || `对话 ${chatId}`,
-					status: item.status ?? null,
-					createdTime: item.created_time ?? null
-				});
+				if (chatId === null || chatId === excluded) continue;
+				sessions.push({ chatId, title: item.title?.trim() || `对话 ${chatId}` });
+				sinceEmit += 1;
+				if (sinceEmit >= SESSION_EMIT_BATCH) {
+					sinceEmit = 0;
+					this.setState({ sessions: [...sessions] });
+				}
 			}
-			if (this.disposed || generation !== this.sessionLoadGeneration) return;
-			this.setState({ sessions });
+			if (stale()) return;
+			this.sessionsLoadedOnce = true;
+			this.setState({ sessions: [...sessions], sessionsLoading: false });
 		} catch (err) {
-			if (this.disposed || generation !== this.sessionLoadGeneration) return;
+			if (stale()) return;
 			this.options.logger?.error("[chat] 加载会话列表失败", err);
+			this.setState({ sessionsLoading: false });
 		}
 	}
 
-	async openSession(chatId: number): Promise<void> {
+	async openSession(chatId: number, article: ArticleBinding | null = null): Promise<void> {
 		if (this.disposed) return;
 		const generation = ++this.generation;
 		this.streamChatId = null;
@@ -140,6 +174,8 @@ export class ChatController {
 			active: {
 				chatId,
 				title: session?.title ?? null,
+				article,
+				pendingSelection: null,
 				messages: [],
 				streaming: false,
 				loading: true,
@@ -179,7 +215,35 @@ export class ChatController {
 		this.setState({ active: createEmptyActive() });
 	}
 
-	send(text: string): void {
+	/**
+	 * 打开某篇文章的对话。一篇文章只有一个会话：已有 chat_id 就继续它，
+	 * 没有才开新的，并在 ack 回来时把 chat_id 绑回文章。
+	 */
+	async openArticleChat(
+		article: ArticleBinding,
+		chatId: number | null,
+		selectedText?: string
+	): Promise<void> {
+		if (this.disposed) return;
+		const selection = selectedText?.trim() || null;
+		if (chatId !== null) {
+			await this.openSession(chatId, article);
+			if (selection) this.setPendingSelection(selection);
+			return;
+		}
+		this.generation += 1;
+		this.streamChatId = null;
+		this.reducer.reset();
+		this.setState({ active: createEmptyActive(article, selection) });
+	}
+
+	setPendingSelection(selectedText: string | null): void {
+		if (this.disposed) return;
+		const selection = selectedText?.trim() || null;
+		this.setState({ active: { ...this.state.active, pendingSelection: selection } });
+	}
+
+	send(text: string, selectedText?: string): void {
 		if (this.disposed) return;
 		const content = text.trim();
 		if (!content) return;
@@ -195,10 +259,12 @@ export class ChatController {
 			content,
 			turnId: ""
 		};
+		const selection = selectedText ?? active.pendingSelection ?? undefined;
 		this.setState({
 			active: {
 				...active,
 				messages: [...active.messages, userMessage],
+				pendingSelection: null,
 				streaming: true,
 				error: null
 			}
@@ -206,6 +272,7 @@ export class ChatController {
 		this.socket.sendChatCompletion({
 			chat_id: active.chatId,
 			content,
+			context: buildReadingContext(active.article, selection),
 			client_request_id: this.requestId
 		});
 	}
@@ -269,7 +336,7 @@ export class ChatController {
 		const chatId = typeof event.chat_id === "number" ? event.chat_id : null;
 		if (chatId === null) return;
 		if (this.streamChatId !== null) return;
-		// The ack may belong to another consumer on the shared socket (AI 续写);
+		// The ack may belong to another consumer on the shared socket;
 		// only adopt it when the echoed client_request_id matches ours.
 		const request = event.request as { client_request_id?: unknown } | undefined;
 		const ackRequestId =
@@ -277,9 +344,9 @@ export class ChatController {
 		if (ackRequestId !== null && ackRequestId !== this.requestId) return;
 		this.streamChatId = chatId;
 		if (active.chatId === null) {
-			this.setState({ active: { ...active, chatId } });
+			this.bindNewChatId(chatId);
 		}
-		void this.loadSessions();
+		void this.loadSessions(true);
 	}
 
 	private handleChatEvent(event: ChatStreamEvent): void {
@@ -290,8 +357,8 @@ export class ChatController {
 		if (eventChatId !== undefined) {
 			if (this.streamChatId === null) {
 				// Fallback when the ack is lost: only a turn_start may claim the
-				// stream, so mid-stream events of another consumer's turn (AI 续写)
-				// are not adopted by mistake.
+				// stream, so mid-stream events of another consumer's turn are not
+				// adopted by mistake.
 				if (event.type !== "turn_start") return;
 				this.adoptStreamChatId(eventChatId);
 			} else if (eventChatId !== this.streamChatId) {
@@ -311,9 +378,22 @@ export class ChatController {
 
 	private adoptStreamChatId(chatId: number): void {
 		this.streamChatId = chatId;
+		if (this.state.active.chatId === null) {
+			this.bindNewChatId(chatId);
+		}
+	}
+
+	/** 新会话第一次拿到 chat_id：写进 active，并把「文章 → 会话」的绑定交出去落盘 */
+	private bindNewChatId(chatId: number): void {
 		const active = this.state.active;
-		if (active.chatId === null) {
-			this.setState({ active: { ...active, chatId } });
+		this.setState({ active: { ...active, chatId } });
+		const readingId = active.article?.readingId;
+		if (typeof readingId === "number") {
+			try {
+				this.options.onArticleChatBound?.(readingId, chatId);
+			} catch (err) {
+				this.options.logger?.error("[chat] 绑定文章会话失败", err);
+			}
 		}
 	}
 
@@ -325,7 +405,7 @@ export class ChatController {
 			const exists = sessions.some((entry) => entry.chatId === chatId);
 			sessions = exists
 				? sessions.map((entry) => (entry.chatId === chatId ? { ...entry, title } : entry))
-				: [{ chatId, title, status: "thinking", createdTime: null }, ...sessions];
+				: [{ chatId, title }, ...sessions];
 		}
 		this.setState({ sessions, active: { ...this.state.active, title } });
 	}
@@ -354,6 +434,7 @@ export class ChatController {
 		const active = this.state.active;
 		const messages = [...active.messages];
 		const last = messages[messages.length - 1];
+		backfillUserTurnId(messages, snapshot.turnId || last?.turnId || "");
 		const hasContent =
 			snapshot.text.length > 0 || snapshot.thinkingLogs.length > 0 || snapshot.taskOutputs.length > 0;
 		if (isStreamingMessage(last)) {
@@ -380,4 +461,30 @@ export class ChatController {
 				: null;
 		this.setState({ active: { ...active, messages, streaming: false, error } });
 	}
+}
+
+/**
+ * 本地发出的用户消息还没有 turn_id（要等服务端回），回合结束时补上。
+ * 写回 Markdown 时按 turn_id 数回合，口径要和服务端历史的 `total` 一致。
+ */
+function backfillUserTurnId(messages: ChatMessage[], turnId: string): void {
+	if (!turnId) return;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (message.role !== "user") continue;
+		if (message.turnId) return;
+		messages[i] = { ...message, id: `user-${turnId}`, turnId };
+		return;
+	}
+}
+
+export function buildReadingContext(
+	article: ArticleBinding | null,
+	selectedText?: string
+): ChatContextModel | undefined {
+	if (!article) return undefined;
+	const params: Record<string, unknown> = { reading_id: article.readingId };
+	const selection = selectedText?.trim();
+	if (selection) params.selected_text = selection;
+	return { type: "reading", params };
 }

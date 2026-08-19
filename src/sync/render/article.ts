@@ -84,12 +84,16 @@ export function renderArticleManaged(input: RenderArticleManagedInput): string {
 	return sections.join("\n\n");
 }
 
-export function articleFrontmatter(item: ReadingItem, syncedAt: string): Record<string, unknown> {
+export function articleFrontmatter(
+	item: ReadingItem,
+	syncedAt: string,
+	chatId: number | null = item.chat_id ?? null
+): Record<string, unknown> {
 	return {
 		puzle_type: "article",
 		reading_id: item.id,
 		puzle_id: item.puzle_id,
-		chat_id: item.chat_id ?? null,
+		chat_id: chatId,
 		title: item.title ?? "",
 		url: item.url ?? null,
 		author: item.author ?? null,

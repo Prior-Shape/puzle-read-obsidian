@@ -21,13 +21,31 @@ export function chatFrontmatter(
 	};
 }
 
+/**
+ * 聊天面板实时写回时用的 frontmatter 补丁。
+ * 只写插件当下确知的字段：`puzle_id` / `created` 来自 reading item，同步时才补得上，
+ * 这里不能带上（processFrontMatter 是逐键覆盖，写 null 会把已同步的值抹掉）。
+ */
+export function liveChatFrontmatter(
+	title: string,
+	syncedAt: string,
+	chatId: number
+): Record<string, unknown> {
+	return {
+		puzle_type: "chat",
+		chat_id: chatId,
+		title,
+		synced: syncedAt
+	};
+}
+
 export interface RenderChatManagedInput {
 	messages: ChatMessage[];
 	keepThinking: boolean;
 }
 
 export function renderChatManaged(input: RenderChatManagedInput): string {
-	const blocks: string[] = ["## 对话"];
+	const blocks: string[] = [];
 	for (const message of input.messages) {
 		const block =
 			message.role === "user"
@@ -45,7 +63,7 @@ export function renderUserMessage(message: ChatMessage): string | null {
 		.split("\n")
 		.map((line) => (line.length > 0 ? `> ${line}` : ">"))
 		.join("\n");
-	return `**${roleLabel("user")}**\n\n${quoted}`;
+	return `## ${roleLabel("user")}\n\n${quoted}`;
 }
 
 export function renderAssistantMessage(message: ChatMessage, keepThinking: boolean): string | null {
@@ -57,7 +75,7 @@ export function renderAssistantMessage(message: ChatMessage, keepThinking: boole
 		if (callout) parts.push(callout);
 	}
 	if (parts.length === 0) return null;
-	return [`**${roleLabel("assistant")}**`, ...parts].join("\n\n");
+	return [`## ${roleLabel("assistant")}`, ...parts].join("\n\n");
 }
 
 export function renderThinkingCallout(logs: AgentLogContent[]): string | null {

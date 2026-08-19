@@ -30,10 +30,21 @@ export function resolveTurnTotal(response: WsChatHistoryResponse): number | null
 	return null;
 }
 
+export interface ChatSyncerOptions {
+	/**
+	 * 该会话此刻正在聊天面板里流式输出。服务端历史还没落到最后一轮，
+	 * 这时同步会用旧历史盖掉面板刚写回的内容，所以直接跳过，下次同步再补。
+	 */
+	isBusy?(chatId: number): boolean;
+}
+
 export class ChatSyncer implements Syncer {
 	readonly key = "chats";
 
-	constructor(private readonly getSocket: () => PuzleSocket) {}
+	constructor(
+		private readonly getSocket: () => PuzleSocket,
+		private readonly options: ChatSyncerOptions = {}
+	) {}
 
 	async sync(ctx: SyncContext): Promise<SyncReport> {
 		const report = createReport(this.key);
@@ -48,6 +59,10 @@ export class ChatSyncer implements Syncer {
 			}
 			const chatId = resolveChatId(item);
 			if (chatId === null || chatId === store.continuationChatId) {
+				report.skipped += 1;
+				continue;
+			}
+			if (this.options.isBusy?.(chatId)) {
 				report.skipped += 1;
 				continue;
 			}

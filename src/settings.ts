@@ -1,6 +1,10 @@
-import { Notice, PluginSettingTab, Setting } from "obsidian";
+import { AbstractInputSuggest, Notice, PluginSettingTab, Setting, TFolder } from "obsidian";
 import type { App, ButtonComponent } from "obsidian";
 import { ObsidianHttpPort } from "./adapters/obsidian";
+import { calibrate, formatScores } from "./annotations/calibrate";
+import { PLAINTEXT_VARIANTS } from "./annotations/plaintext";
+import type { PlaintextVariant } from "./annotations/plaintext";
+import { ArticleSourceCache } from "./annotations/source";
 import { AuthError, PuzleClient } from "./core/api/client";
 import type PuzleReadPlugin from "./main";
 
@@ -12,20 +16,23 @@ export interface Settings {
 	rootFolder: string;
 	autoSyncMinutes: number;
 	injectAnchors: boolean;
+	readingMode: boolean;
 	keepThinking: boolean;
 	onEditedManaged: OnEditedManaged;
-	continueMaxChars: number;
+	/** 计算高亮偏移时使用的纯文本口径，可用「自动校准」按已有高亮反推 */
+	plaintextVariant: PlaintextVariant;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-	baseUrl: "https://read-web-test.puzle.com.cn",
+	baseUrl: "https://read-web.puzle.com.cn",
 	token: "",
 	rootFolder: "PuzleRead",
 	autoSyncMinutes: 0,
 	injectAnchors: true,
+	readingMode: true,
 	keepThinking: false,
 	onEditedManaged: "overwrite",
-	continueMaxChars: 4000
+	plaintextVariant: "raw"
 };
 
 export interface SyncArticleState {
@@ -33,6 +40,10 @@ export interface SyncArticleState {
 	fingerprint: string;
 	managedHash: string;
 	syncedAt: string;
+	/** 该文章绑定的会话；一篇文章只有一个，插件内新建会话后回填 */
+	chatId?: number | null;
+	/** link / file —— 「刷新这一篇」时决定调哪个详情接口，老数据缺这个字段时会现探测 */
+	resourceType?: "link" | "file";
 }
 
 export interface SyncHighlightState {
@@ -52,6 +63,7 @@ export interface SyncState {
 	articles: Record<number, SyncArticleState>;
 	highlights: Record<number, SyncHighlightState>;
 	chats: Record<number, SyncChatState>;
+	/** 历史遗留：曾经的 AI 续写专用会话。功能已下线，字段保留只为继续把它挡在会话列表与同步之外 */
 	continuationChatId: number | null;
 }
 
@@ -103,7 +115,43 @@ export function mergePluginData(saved: unknown): PluginData {
 	return deepMerge(cloneDefaultPluginData(), saved);
 }
 
+/** 归一化根目录：去掉首尾斜杠与空白，防止写出 `/PuzleRead/` 这种路径。 */
+export function normalizeRootFolder(value: string): string {
+	return value.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
 const SAVE_DEBOUNCE_MS = 500;
+
+/** 给「根目录」输入框加上 Vault 内已有文件夹的自动补全，省得手打路径。 */
+class FolderSuggest extends AbstractInputSuggest<string> {
+	private readonly onPick: (value: string) => void;
+
+	constructor(app: App, inputEl: HTMLInputElement, onPick: (value: string) => void) {
+		super(app, inputEl);
+		this.onPick = onPick;
+	}
+
+	protected getSuggestions(query: string): string[] {
+		const needle = query.toLowerCase();
+		return this.app.vault
+			.getAllLoadedFiles()
+			.filter((file): file is TFolder => file instanceof TFolder && file.path !== "/")
+			.map((folder) => folder.path)
+			.filter((path) => path.toLowerCase().includes(needle))
+			.sort((a, b) => a.localeCompare(b))
+			.slice(0, 50);
+	}
+
+	renderSuggestion(value: string, el: HTMLElement): void {
+		el.setText(value);
+	}
+
+	selectSuggestion(value: string): void {
+		this.setValue(value);
+		this.onPick(value);
+		this.close();
+	}
+}
 
 export class PuzleSettingTab extends PluginSettingTab {
 	private readonly plugin: PuzleReadPlugin;
@@ -177,9 +225,13 @@ export class PuzleSettingTab extends PluginSettingTab {
 				text.setPlaceholder(DEFAULT_SETTINGS.rootFolder)
 					.setValue(settings.rootFolder)
 					.onChange((value: string) => {
-						settings.rootFolder = value.trim();
+						settings.rootFolder = normalizeRootFolder(value) || DEFAULT_SETTINGS.rootFolder;
 						this.queueSave();
 					});
+				new FolderSuggest(this.app, text.inputEl, (picked: string) => {
+					settings.rootFolder = normalizeRootFolder(picked) || DEFAULT_SETTINGS.rootFolder;
+					this.queueSave();
+				});
 			});
 
 		new Setting(containerEl)
@@ -200,6 +252,18 @@ export class PuzleSettingTab extends PluginSettingTab {
 			.addToggle((toggle) => {
 				toggle.setValue(settings.injectAnchors).onChange((value: boolean) => {
 					settings.injectAnchors = value;
+					this.queueSave();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("以阅读模式打开同步内容")
+			.setDesc(
+				"打开根目录下的同步笔记时自动切换到阅读视图，避免误改正文。仍可用 Cmd/Ctrl+E 手动切回编辑"
+			)
+			.addToggle((toggle) => {
+				toggle.setValue(settings.readingMode).onChange((value: boolean) => {
+					settings.readingMode = value;
 					this.queueSave();
 				});
 			});
@@ -229,15 +293,20 @@ export class PuzleSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("续写上下文最大字符数")
-			.setDesc("AI 续写时取光标前文本的字符上限")
-			.addText((text) => {
-				text.inputEl.type = "number";
-				text.setValue(String(settings.continueMaxChars)).onChange((value: string) => {
-					const parsed = Number.parseInt(value, 10);
-					settings.continueMaxChars =
-						Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SETTINGS.continueMaxChars;
+			.setName("高亮定位口径")
+			.setDesc(
+				"创建高亮时把正文选区换算成后端偏移所用的纯文本口径。点「自动校准」会拿账号里已有的高亮当标准答案反推，选出对得上的那个"
+			)
+			.addDropdown((dropdown) => {
+				for (const variant of PLAINTEXT_VARIANTS) dropdown.addOption(variant, variant);
+				dropdown.setValue(settings.plaintextVariant).onChange((value: string) => {
+					settings.plaintextVariant = value as PlaintextVariant;
 					this.queueSave();
+				});
+			})
+			.addButton((button) => {
+				button.setButtonText("自动校准").onClick(() => {
+					void this.calibrateVariant(button);
 				});
 			});
 
@@ -252,6 +321,43 @@ export class PuzleSettingTab extends PluginSettingTab {
 						void this.testConnection(button);
 					});
 			});
+	}
+
+	private async calibrateVariant(button: ButtonComponent): Promise<void> {
+		this.flushPendingSave();
+		const { baseUrl, token } = this.plugin.data.settings;
+		if (!token) {
+			new Notice("请先填写 Token");
+			return;
+		}
+		button.setDisabled(true);
+		button.setButtonText("校准中…");
+		try {
+			const client = new PuzleClient(baseUrl, token, new ObsidianHttpPort());
+			const cache = new ArticleSourceCache(this.plugin, () => client);
+			const result = await calibrate(client, cache, {
+				maxArticles: 5,
+				onProgress: (done, target) => button.setButtonText(`校准中 ${done}/${target}…`)
+			});
+			console.info("[Puzle Read] 高亮定位口径校准", result.scores);
+			if (!result.best || result.best.total === 0) {
+				new Notice(`Puzle Read：${formatScores(result)}`, 10000);
+				return;
+			}
+			this.plugin.data.settings.plaintextVariant = result.best.variant;
+			await this.plugin.saveSettings();
+			this.display();
+			const rate = Math.round((result.best.exact / result.best.total) * 100);
+			new Notice(
+				`Puzle Read：已选用「${result.best.variant}」口径，${result.best.exact}/${result.best.total}（${rate}%）条已有高亮能精确还原。\n${formatScores(result)}`,
+				12000
+			);
+		} catch (error) {
+			new Notice(`Puzle Read：校准失败 — ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			button.setDisabled(false);
+			button.setButtonText("自动校准");
+		}
 	}
 
 	private async testConnection(button: ButtonComponent): Promise<void> {

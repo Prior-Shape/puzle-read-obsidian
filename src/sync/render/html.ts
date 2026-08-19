@@ -42,17 +42,18 @@ export function decodeEntities(input: string): string {
 	});
 }
 
-interface ElementNode {
+export interface ElementNode {
 	kind: "element";
 	tag: string;
 	attrs: Record<string, string>;
 	children: Node[];
 }
-interface TextNode {
+export interface TextNode {
 	kind: "text";
 	text: string;
 }
-type Node = ElementNode | TextNode;
+export type HtmlNode = ElementNode | TextNode;
+type Node = HtmlNode;
 
 function parseAttributes(raw: string): Record<string, string> {
 	const attrs: Record<string, string> = {};

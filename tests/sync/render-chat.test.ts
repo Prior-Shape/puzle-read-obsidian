@@ -81,17 +81,17 @@ describe("renderChatManaged", () => {
 		expect(managed).toContain("拆解四个层次");
 	});
 
-	it("renders multi-line user content as a quote block and assistant content verbatim", () => {
+	it("renders each message as an H2 heading: 用户内容引用块、assistant 内容原样", () => {
 		const managed = renderChatManaged({ messages: MESSAGES, keepThinking: false });
-		expect(managed).toContain("**🙋 我**\n\n> 阅读的四个层次是什么？");
+		expect(managed).toContain("## 🙋 我\n\n> 阅读的四个层次是什么？");
 		expect(managed).toContain("> 第二层\n> 展开讲讲？");
 		expect(managed).toContain(
-			"**🤖 Puzle**\n\n阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。"
+			"## 🤖 Puzle\n\n阅读的四个层次：基础阅读、检视阅读、分析阅读、主题阅读。"
 		);
 	});
 
-	it("always keeps the 对话 heading even without messages", () => {
-		expect(renderChatManaged({ messages: [], keepThinking: true })).toBe("## 对话");
+	it("renders nothing for an empty session", () => {
+		expect(renderChatManaged({ messages: [], keepThinking: true })).toBe("");
 	});
 
 	it("renders mapped history turns end to end", () => {

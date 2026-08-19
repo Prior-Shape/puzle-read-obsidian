@@ -9,9 +9,19 @@ export interface ChatPanelProps {
 	app: App;
 	getController(): ChatController;
 	getKeepThinking(): boolean;
+	/** 打开该会话的 `Chats/*.md` 留档；不传则不渲染该按钮 */
+	onOpenNote?(chatId: number): void;
+	/** 打开绑定的文章笔记 */
+	onOpenArticle?(path: string): void;
 }
 
-export function ChatPanel({ app, getController, getKeepThinking }: ChatPanelProps) {
+export function ChatPanel({
+	app,
+	getController,
+	getKeepThinking,
+	onOpenNote,
+	onOpenArticle
+}: ChatPanelProps) {
 	const [controller, setController] = useState<ChatController | null>(null);
 	const [state, setState] = useState<ChatControllerState | null>(null);
 
@@ -25,17 +35,52 @@ export function ChatPanel({ app, getController, getKeepThinking }: ChatPanelProp
 
 	if (!controller || !state) return null;
 	const { active } = state;
+	const article = active.article;
 
 	return (
-		<div className="puzle-chat">
+		<div className="puzle-chat puzle-chat-sidebar">
 			<SessionPicker
 				sessions={state.sessions}
 				activeChatId={active.chatId}
 				activeTitle={active.title}
 				disabled={active.streaming}
+				loading={state.sessionsLoading}
 				onOpenSession={(chatId) => void controller.openSession(chatId)}
 				onNewSession={() => controller.newSession()}
+				onOpenNote={onOpenNote}
 			/>
+			{article && (
+				<div className="puzle-chat-article-chip">
+					<span>📄 正在讨论：</span>
+					{article.path && onOpenArticle ? (
+						<a
+							href="#"
+							onClick={(event) => {
+								event.preventDefault();
+								onOpenArticle(article.path as string);
+							}}
+						>
+							{article.title}
+						</a>
+					) : (
+						<span>{article.title}</span>
+					)}
+				</div>
+			)}
+			{active.pendingSelection && (
+				<div className="puzle-chat-quote">
+					<span className="puzle-chat-quote-text">“{active.pendingSelection}”</span>
+					<button
+						type="button"
+						className="puzle-chat-quote-clear clickable-icon"
+						title="不引用这段"
+						aria-label="不引用这段"
+						onClick={() => controller.setPendingSelection(null)}
+					>
+						×
+					</button>
+				</div>
+			)}
 			<MessageList
 				app={app}
 				messages={active.messages}

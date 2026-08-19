@@ -21,14 +21,15 @@ function makeArticleState(id: number): SyncArticleState {
 describe("DEFAULT_SETTINGS", () => {
 	it("matches the spec defaults", () => {
 		expect(DEFAULT_SETTINGS).toEqual({
-			baseUrl: "https://read-web-test.puzle.com.cn",
+			baseUrl: "https://read-web.puzle.com.cn",
 			token: "",
 			rootFolder: "PuzleRead",
 			autoSyncMinutes: 0,
 			injectAnchors: true,
+			readingMode: true,
 			keepThinking: false,
 			onEditedManaged: "overwrite",
-			continueMaxChars: 4000
+			plaintextVariant: "raw"
 		});
 	});
 
@@ -68,7 +69,6 @@ describe("mergePluginData", () => {
 		expect(data.settings.injectAnchors).toBe(true);
 		expect(data.settings.keepThinking).toBe(false);
 		expect(data.settings.onEditedManaged).toBe("overwrite");
-		expect(data.settings.continueMaxChars).toBe(4000);
 		expect(data.syncState).toEqual(DEFAULT_SYNC_STATE);
 	});
 

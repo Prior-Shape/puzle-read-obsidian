@@ -83,37 +83,6 @@ const listFiles = () =>
 		`return app.vault.getFiles().map(f => f.path).filter(p => p.startsWith('PuzleRead')).sort();`
 	);
 
-/** 新建笔记并在源码模式打开，等到 activeEditor 就绪后把光标放到文末。 */
-async function openNoteForEditing(name, body) {
-	await session.evaluate(`
-		const existing = app.vault.getFileByPath(${JSON.stringify(name)});
-		if (existing) await app.fileManager.trashFile(existing);
-		const f = await app.vault.create(${JSON.stringify(name)}, ${JSON.stringify(body)});
-		const leaf = app.workspace.getLeaf(true);
-		await leaf.openFile(f, { active: true, state: { mode: 'source' } });
-		app.workspace.setActiveLeaf(leaf, { focus: true });
-		return true;
-	`);
-	await waitFor(session, `!!app.workspace.activeEditor?.editor`, {
-		timeoutMs: 10000,
-		label: `编辑器就绪: ${name}`
-	});
-	await session.evaluate(`
-		const ed = app.workspace.activeEditor.editor;
-		const last = ed.lastLine();
-		ed.setCursor({ line: last, ch: ed.getLine(last).length });
-		return true;
-	`);
-}
-
-/** 续写状态栏是否可见（用元素样式判断，body.innerText 对 display:none 不可靠）。 */
-const writerStatusVisible = () =>
-	session.evaluate(`
-		const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-		if (!el) return false;
-		return el.style.display !== 'none' && el.offsetParent !== null;
-	`);
-
 /**
  * 在设置 popout 窗口里点「测试连接」并收集通知。
  * 注意：Notice 渲染在设置窗口内（不是主窗口），且 5s 后自动消失，必须高频轮询。
@@ -297,7 +266,7 @@ await (async () => {
 	});
 
 	// ============ 3. 聊天面板 ============
-	await test("聊天：打开面板、发送消息、流式渲染、会话落库", async () => {
+	await test("聊天：打开面板、发送消息、流式渲染、会话落库、写回对话笔记", async () => {
 		await inPlugin(`app.commands.executeCommandById('puzle-read:open-puzle-chat'); return true;`);
 		await waitFor(session, `document.querySelector('.puzle-chat') !== null`, {
 			timeoutMs: 10000,
@@ -350,6 +319,23 @@ await (async () => {
 		);
 		console.log(`     会话下拉: ${titled.join(" | ")}`);
 		assert(titled.some((t) => t.includes("Mock 生成的标题")), "title_generated 未反映到会话列表");
+
+		// 说完一轮就地写回 Chats/*.md：聊天在右边栏，留档看 Markdown
+		await waitFor(
+			session,
+			`app.vault.getFiles().some(f=>f.path.startsWith('PuzleRead/Chats/') && f.path.includes('Mock 生成的标题'))`,
+			{ timeoutMs: 10000, label: "对话笔记写回" }
+		);
+		const note = await inPlugin(`
+			const f = app.vault.getFiles().find(f=>f.path.includes('Mock 生成的标题'));
+			const chatId = Number(f.path.match(/\\(c(\\d+)\\)/)[1]);
+			return { path: f.path, content: await app.vault.read(f), state: p.data.syncState.chats[chatId] };
+		`);
+		console.log(`     对话笔记: ${note.path}`);
+		assert(note.content.includes("你好，介绍一下阅读层次"), "对话笔记缺用户提问");
+		assert(note.content.includes("mock 后端的流式回复"), "对话笔记缺 assistant 回复");
+		assert(note.content.includes("%% puzle:begin %%"), "对话笔记缺 managed 标记");
+		assert(note.state && note.state.turnCount === 1, "对话笔记未记入同步状态");
 	});
 
 	await test("修复验证：流式中断线时面板复位而非永久卡死", async () => {
@@ -391,73 +377,7 @@ await (async () => {
 		assert(inputDisabled === false, "断线后输入框仍被禁用（卡死）");
 	});
 
-	// ============ 4. AI 续写 ============
-	await test("续写：命令流式写入编辑器", async () => {
-		await openNoteForEditing("续写测试.md", "分析阅读要求读者与作者达成共识");
-		await inPlugin(`app.commands.executeCommandById('puzle-read:puzle-continue-writing'); return true;`);
-
-		await waitFor(
-			session,
-			`(app.workspace.activeEditor?.editor?.getValue() || '').includes('主题阅读')`,
-			{ timeoutMs: 20000, label: "续写内容写入编辑器" }
-		);
-		const value = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		console.log(`     编辑器内容: ${value}`);
-		assert(value.startsWith("分析阅读要求读者与作者达成共识"), "原文被破坏");
-		assert(value.includes("主题阅读"), "续写内容未写入");
-
-		const chatId = await inPlugin(`return p.data.syncState.continuationChatId;`);
-		console.log(`     续写会话 id 已持久化: ${chatId}`);
-		assert(typeof chatId === "number", "continuationChatId 未持久化");
-	});
-
-	await test("修复验证：续写期间用户在插入点前编辑则中止（防错位写入）", async () => {
-		await control({ streamMode: "slow" });
-		await openNoteForEditing("续写中断测试.md", "基础阅读解决识字问题");
-		await inPlugin(`app.commands.executeCommandById('puzle-read:puzle-continue-writing'); return true;`);
-		await waitFor(session, `(() => {
-			const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-			return !!el && el.style.display !== 'none';
-		})()`, { timeoutMs: 10000, label: "续写状态栏出现" });
-
-		// 等第一个 delta 落地
-		await waitFor(
-			session,
-			`(app.workspace.activeEditor?.editor?.getValue() || '').length > '基础阅读解决识字问题'.length`,
-			{ timeoutMs: 20000, label: "首个续写片段写入" }
-		);
-		const midway = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-
-		// 用户在插入点之前插入文字 → offset 全部失效
-		await session.evaluate(`
-			const ed = app.workspace.activeEditor.editor;
-			ed.replaceRange('【用户插入】', { line: 0, ch: 0 }, { line: 0, ch: 0 });
-			return true;
-		`);
-		await sleep(2500);
-
-		const after = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		console.log(`     中断前: ${midway}`);
-		console.log(`     中断后: ${after}`);
-		assert(after.startsWith("【用户插入】"), "用户插入的内容被破坏");
-		assert(after.includes("基础阅读解决识字问题"), "原文被破坏");
-
-		const stillVisible = await writerStatusVisible();
-		console.log(`     续写状态栏仍显示: ${stillVisible}`);
-		assert(stillVisible === false, "中止后续写状态栏仍在显示（running 状态未复位）");
-
-		// 中止后不应再有新内容追加
-		await sleep(2000);
-		const final = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		assert(final === after, `中止后仍在写入：\n  ${after}\n  → ${final}`);
-
-		// 应向服务端发过 stop_completion，避免后端继续算力空转
-		const stops = (await mockState()).wsFrames.filter((f) => f.msg?.type === "stop_completion");
-		console.log(`     已发送 stop_completion ${stops.length} 次`);
-		assert(stops.length >= 1, "中止时未发送 stop_completion");
-	});
-
-	// ============ 5. 设置页 ============
+	// ============ 4. 设置页 ============
 	await test("设置：测试连接按钮走通鉴权链路", async () => {
 		const list = await clickTestConnection();
 		console.log(`     通知: ${list.join(" | ")}`);

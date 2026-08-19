@@ -7,19 +7,23 @@ import type { ChatController } from "./controller";
 
 export const VIEW_TYPE_CHAT = "puzle-chat-view";
 
+export interface ChatViewDeps {
+	getController(): ChatController;
+	getKeepThinking(): boolean;
+	/** 在主区域打开该会话的 `Chats/*.md`；没有笔记时自行提示 */
+	openNote(chatId: number): void;
+	openArticle(path: string): void;
+}
+
+/** 右边栏聊天面板：对话本身在这里进行，历史留档看 `Chats/*.md` */
 export class ChatView extends ItemView {
-	private readonly getController: () => ChatController;
-	private readonly getKeepThinking: () => boolean;
 	private root: Root | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
-		getController: () => ChatController,
-		getKeepThinking: () => boolean
+		private readonly deps: ChatViewDeps
 	) {
 		super(leaf);
-		this.getController = getController;
-		this.getKeepThinking = getKeepThinking;
 	}
 
 	getViewType(): string {
@@ -39,7 +43,13 @@ export class ChatView extends ItemView {
 		this.contentEl.addClass("puzle-chat-root");
 		this.root = createRoot(this.contentEl);
 		this.root.render(
-			<ChatPanel app={this.app} getController={this.getController} getKeepThinking={this.getKeepThinking} />
+			<ChatPanel
+				app={this.app}
+				getController={this.deps.getController}
+				getKeepThinking={this.deps.getKeepThinking}
+				onOpenNote={this.deps.openNote}
+				onOpenArticle={this.deps.openArticle}
+			/>
 		);
 	}
 

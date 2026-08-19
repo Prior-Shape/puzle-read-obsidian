@@ -1,6 +1,6 @@
 // 全链路 E2E：真实 Obsidian × 真实 Puzle 后端。
 //
-// ⚠️ 这里包含写路径（chat_completion / AI 续写），会在账号里产生真实会话。
+// ⚠️ 这里包含写路径（chat_completion），会在账号里产生真实会话。
 // 只在明确授权时运行。用法：node e2e/run-live.mjs [用例名过滤]
 
 import { connectToSettingsWindow, connectToVault, sleep, waitFor } from "./cdp.mjs";
@@ -80,44 +80,6 @@ const assistantText = () =>
 	session.evaluate(`
 		const nodes = [...document.querySelectorAll('.puzle-chat-message-assistant .puzle-chat-markdown')];
 		return nodes.length ? nodes[nodes.length - 1].innerText : '';
-	`);
-
-/**
- * 直接 await 控制器的 loadSessions()，避免对 DOM 轮询时命中重新挂载前的旧
- * sessions（面板挂载会先用控制器现有状态渲染，加载 199 条要几秒）。
- */
-const reloadSessions = () =>
-	inPlugin(`
-		const view = app.workspace.getLeavesOfType('puzle-chat-view')[0]?.view;
-		if (!view) throw new Error('聊天面板未打开');
-		const ctrl = view.getController();
-		await ctrl.loadSessions();
-		return ctrl.getState().sessions.length;
-	`);
-
-async function openNoteForEditing(name, body) {
-	await session.evaluate(`
-		const existing = app.vault.getFileByPath(${JSON.stringify(name)});
-		if (existing) await app.fileManager.trashFile(existing);
-		const f = await app.vault.create(${JSON.stringify(name)}, ${JSON.stringify(body)});
-		const leaf = app.workspace.getLeaf(true);
-		await leaf.openFile(f, { active: true, state: { mode: 'source' } });
-		app.workspace.setActiveLeaf(leaf, { focus: true });
-		return true;
-	`);
-	await waitFor(session, `!!app.workspace.activeEditor?.editor`, { timeoutMs: 10000, label: "编辑器就绪" });
-	await session.evaluate(`
-		const ed = app.workspace.activeEditor.editor;
-		const last = ed.lastLine();
-		ed.setCursor({ line: last, ch: ed.getLine(last).length });
-		return true;
-	`);
-}
-
-const writerRunning = () =>
-	session.evaluate(`
-		const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-		return !!el && el.style.display !== 'none';
 	`);
 
 await (async () => {
@@ -349,81 +311,6 @@ await (async () => {
 		if (state.chatId && !createdChats.includes(state.chatId)) createdChats.push(state.chatId);
 	});
 
-	await test("写入：AI 续写流式插入编辑器", async () => {
-		await openNoteForEditing("联调-续写.md", "阅读可以分为四个层次，第一层是基础阅读，");
-		const beforeLen = await session.evaluate(`return app.workspace.activeEditor.editor.getValue().length;`);
-
-		await inPlugin(`app.commands.executeCommandById('puzle-read:puzle-continue-writing'); return true;`);
-		await waitFor(session, `(() => {
-			const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-			return !!el && el.style.display !== 'none';
-		})()`, { timeoutMs: 20000, label: "续写状态栏出现" });
-		console.log("     续写已启动…");
-
-		await waitFor(
-			session,
-			`app.workspace.activeEditor.editor.getValue().length > ${beforeLen}`,
-			{ timeoutMs: 60000, label: "续写内容开始写入" }
-		);
-		const samples = [];
-		for (let i = 0; i < 30; i++) {
-			await sleep(700);
-			samples.push(await session.evaluate(`return app.workspace.activeEditor.editor.getValue().length;`));
-			if (!(await writerRunning())) break;
-		}
-		await waitFor(session, `(() => {
-			const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-			return !el || el.style.display === 'none';
-		})()`, { timeoutMs: 90000, label: "续写结束状态栏隐藏" });
-
-		const value = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		const growth = samples.filter((n, i) => i > 0 && n > samples[i - 1]).length;
-		console.log(`     长度采样: ${samples.slice(0, 8).join("→")}${samples.length > 8 ? "…" : ""}（递增 ${growth} 次）`);
-		console.log(`     结果: ${value.slice(0, 120)}`);
-		assert(value.startsWith("阅读可以分为四个层次，第一层是基础阅读，"), "原文被破坏");
-		assert(value.length > beforeLen, "续写内容未写入");
-		assert(growth >= 1, "未观察到流式增量写入");
-
-		const chatId = await inPlugin(`return p.data.syncState.continuationChatId;`);
-		console.log(`     续写会话 id 已持久化: ${chatId}`);
-		assert(typeof chatId === "number", "continuationChatId 未持久化");
-		if (chatId && !createdChats.includes(chatId)) createdChats.push(chatId);
-	});
-
-	await test("写入：续写期间编辑文档触发中止", async () => {
-		await openNoteForEditing("联调-续写中断.md", "检视阅读的要点在于，");
-		await inPlugin(`app.commands.executeCommandById('puzle-read:puzle-continue-writing'); return true;`);
-		await waitFor(session, `(() => {
-			const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-			return !!el && el.style.display !== 'none';
-		})()`, { timeoutMs: 20000, label: "续写启动" });
-		await waitFor(
-			session,
-			`app.workspace.activeEditor.editor.getValue().length > '检视阅读的要点在于，'.length`,
-			{ timeoutMs: 60000, label: "首个片段写入" }
-		);
-
-		await session.evaluate(`
-			const ed = app.workspace.activeEditor.editor;
-			ed.replaceRange('【用户插入】', { line: 0, ch: 0 }, { line: 0, ch: 0 });
-			return true;
-		`);
-		console.log("     已在插入点之前插入文字");
-
-		await waitFor(session, `(() => {
-			const el = document.querySelector('.status-bar-item.plugin-puzle-read');
-			return !el || el.style.display === 'none';
-		})()`, { timeoutMs: 30000, label: "检测到编辑后中止续写" });
-
-		const afterAbort = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		await sleep(4000);
-		const final = await session.evaluate(`return app.workspace.activeEditor.editor.getValue();`);
-		console.log(`     中止时: ${afterAbort.slice(0, 80)}`);
-		assert(final === afterAbort, `中止后仍在写入:\n  ${afterAbort}\n  → ${final}`);
-		assert(final.startsWith("【用户插入】"), "用户插入内容被破坏");
-		assert(final.includes("检视阅读的要点在于，"), "原文被破坏");
-	});
-
 	// ============ 同步链路（写 vault，不写后端）============
 	await test("同步：真实文章 + 高亮 + 对话全流程", async () => {
 		try {
@@ -434,7 +321,7 @@ await (async () => {
 			await p.saveSettings();
 			const c = p.client;
 			if (!c.__origIterate) c.__origIterate = c.iterateAllReadingItems.bind(c);
-			// 放行 4 个会话：其中续写专用会话会被 ChatSyncer 有意跳过
+			// 放行 4 个会话
 			c.iterateAllReadingItems = async function* (filter) {
 				let links = 0, chats = 0;
 				for await (const item of c.__origIterate(filter)) {

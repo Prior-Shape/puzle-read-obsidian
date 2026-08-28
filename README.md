@@ -9,6 +9,10 @@
 ![同步与 Bases 视图截图占位](docs/assets/screenshot-sync.png)
 ![聊天面板截图占位](docs/assets/screenshot-chat.png)
 
+## 使用要求与网络说明
+
+本插件需要 Puzle Read 账号和网络连接。插件只会连接 Puzle Read 服务，用于验证账号、同步文章/高亮/评论及发送 AI 对话请求；相关内容会按你的操作在 Puzle Read 与当前 Obsidian vault 之间同步。认证 Token 保存在本地 vault 的插件数据目录中，详见下方配置与安全提示。
+
 ## 安装
 
 要求 Obsidian ≥ 1.10.0（Bases 视图依赖）。
@@ -16,7 +20,7 @@
 ### 方式一：BRAT（推荐，可自动更新）
 
 1. 在社区插件市场安装并启用 [BRAT](https://github.com/TfTHacker/obsidian42-brat)。
-2. 命令面板执行 `BRAT: Add a beta plugin for testing`，填入本仓库地址（`PriorShape/puzle-read-obsidian`）。
+2. 命令面板执行 `BRAT: Add a beta plugin for testing`，填入本仓库地址（`Prior-Shape/puzle-read-obsidian`）。
 3. 在 设置 → 第三方插件 中启用 **Puzle Read**。
 
 ### 方式二：手动安装
